@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dive Log</title>
+<meta name="description" content="Kjell's scuba dive log: dives, bottom time, depth and air consumption, read live from Google Sheets.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231f6f8b'/%3E%3Cpath d='M6 18c3-3 6-3 10 0s7 3 10 0' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+/* ---------- CONFIG: data source lives in the script below (CSV_URL) ---------- */
+:root{
+  --font-anthropic-sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-anthropic-serif:"Source Serif 4",Georgia,serif;
+  --color-bg:#f7f6f2;--color-panel:#ffffff;--color-fg:#1d1d1b;--color-fg-muted:#6b6a65;
+  --color-border-line:#e4e2db;--color-ok:#1f7a4d;--color-warn:#a3560b;--color-bad:#c0392b;
+  --dv-s0:#1f6f8b;--dv-s1:#d9822b;
+  --cds-chart-grid:#ecebe6;--cds-chart-axis:#bdbbb3;--cds-chart-reference:#8f8d86;
+  --cds-surface-popover:#ffffff;--cds-border:#dddbd3;--cds-text-secondary:#6b6a65;
+  --cds-shadow-popover:0 6px 20px rgba(0,0,0,.12);
+  --cds-radius:10px;--cds-pad-xs:6px;--cds-pad-sm:10px;--cds-pad-lg:20px;
+  --cds-gap-xs:4px;--cds-gap-sm:8px;--cds-gap-md:16px;--cds-gap-lg:28px;
+  --cds-font-size-caption:12.5px;--cds-font-size-body:15px;--cds-font-size-heading:16px;--cds-font-size-title:34px;
+  --cds-font-weight-medium:500;--cds-dur-slow:.4s;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --color-bg:#151514;--color-panel:#1f1f1d;--color-fg:#ecebe6;--color-fg-muted:#9d9b94;
+    --color-border-line:#33332f;--color-ok:#5cc38b;--color-warn:#e2a35a;--color-bad:#ef6b5b;
+    --dv-s0:#5fb3d0;--dv-s1:#f0a45c;
+    --cds-chart-grid:#2c2c29;--cds-chart-axis:#4a4a45;--cds-chart-reference:#8a8882;
+    --cds-surface-popover:#262624;--cds-border:#3b3b37;--cds-text-secondary:#9d9b94;
+    --cds-shadow-popover:0 6px 20px rgba(0,0,0,.5);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--color-bg);color:var(--color-fg)}
+body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1200px;margin:0 auto;padding:32px clamp(16px,4vw,40px) 48px}
+.dash-skeleton{color:transparent!important;background:var(--color-border-line);border-radius:6px;animation:pulse 1.4s ease-in-out infinite}
+.dv-chart.dash-skeleton{background:var(--color-border-line);opacity:.5}
+@keyframes pulse{50%{opacity:.55}}
+.foot{margin-top:var(--cds-gap-lg);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between}
+.foot a{color:inherit}
+.dv-error{background:var(--color-panel);border:1px solid var(--color-border-line);border-left:3px solid var(--color-bad);border-radius:var(--cds-radius);padding:var(--cds-pad-sm) var(--cds-pad-lg);font-size:var(--cds-font-size-body);line-height:1.5}
+.dv-error[hidden]{display:none}
+</style>
+</head>
+<body>
+<main class="wrap">
+<div class="dv-error" id="load-error" hidden></div>
+<style>
+.dv{--dv-c0:var(--dv-s0);--dv-c1:var(--dv-s1)}
+.dv{font-family:var(--font-anthropic-sans);color:var(--color-fg);display:flex;flex-direction:column;gap:var(--cds-gap-lg)}
+.dv-head h1{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);margin:0}
+.dv-take{color:var(--color-fg-muted);margin:var(--cds-gap-xs) 0 0;font-size:var(--cds-font-size-body);line-height:1.5}
+.dv-take b{font-weight:600;color:var(--color-fg)}
+.dv-take .warn{color:var(--color-warn)}
+.dv-refresh{margin-top:var(--cds-gap-sm);padding:4px 12px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-panel);color:var(--color-fg);font:inherit;font-size:var(--cds-font-size-caption);cursor:pointer}
+.dv-refresh:disabled{color:var(--color-fg-muted);cursor:default}
+.dv-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:var(--cds-gap-md)}
+.dv-tile,.dv-card{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);min-width:0}
+.dv-tile .lbl{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.dv-tile .big{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);font-variant-numeric:tabular-nums;margin:var(--cds-gap-xs) 0;line-height:1.15}
+.dv-tile .unit{font-family:var(--font-anthropic-sans);font-size:var(--cds-font-size-body);color:var(--color-fg-muted);margin-left:2px}
+.dv-tile .sub{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.dv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:var(--cds-gap-md)}
+.dv-card h2{font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium);margin:0}
+.dv-card .note{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);margin:var(--cds-gap-xs) 0 var(--cds-gap-md);line-height:1.45}
+.dv-chart{position:relative;min-height:260px}
+.dv-chart.short{min-height:220px}
+.dv-chart svg{display:block;overflow:visible}
+.dv-chart text{font-family:var(--font-anthropic-sans);font-size:var(--cds-font-size-caption);fill:var(--color-fg-muted)}
+.dv-legend{display:flex;gap:var(--cds-gap-md);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);margin-bottom:var(--cds-gap-sm)}
+.dv-legend span{display:inline-flex;align-items:center;gap:6px}
+.dv-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.dv-tip{position:absolute;z-index:2;background:var(--cds-surface-popover);border:1px solid var(--cds-border);border-radius:var(--cds-radius);box-shadow:var(--cds-shadow-popover);padding:var(--cds-pad-xs) var(--cds-pad-sm);font-size:var(--cds-font-size-caption);pointer-events:none;max-width:16rem;line-height:1.45}
+.dv-tip .h{color:var(--cds-text-secondary)}
+.dv-fail{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
+.dv-fail i{width:.375rem;height:.375rem;border-radius:50%;background:var(--color-bad)}
+.dv-tablewrap{max-height:28rem;overflow:auto}
+.dv table{width:100%;border-collapse:collapse;font-size:var(--cds-font-size-caption);font-variant-numeric:tabular-nums}
+.dv th{position:sticky;top:0;background:var(--color-panel);text-align:left;font-weight:var(--cds-font-weight-medium);color:var(--color-fg-muted);padding:6px 8px;border-bottom:1px solid var(--color-border-line);white-space:nowrap;cursor:pointer;user-select:none}
+.dv th.num,.dv td.num{text-align:right}
+.dv td{padding:6px 8px;border-bottom:1px solid var(--color-border-line);vertical-align:top}
+.dv td.nowrap{white-space:nowrap}
+.dv td.notes{color:var(--color-fg-muted);min-width:14rem}
+.dv tr.pending td{color:var(--color-fg-muted);font-style:italic}
+.dv-search{width:100%;max-width:18rem;box-sizing:border-box;padding:6px 10px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-bg);color:var(--color-fg);font:inherit;font-size:var(--cds-font-size-caption);margin-bottom:var(--cds-gap-sm)}
+@media (max-width:640px){.dv .hide-narrow{display:none}}
+[data-dash-source-state=empty]{color:transparent}
+[data-dash-source-state=refreshing]{opacity:.5;transition:opacity var(--cds-dur-slow)}
+</style>
+<div class="dv">
+  <header class="dv-head" id="top">
+    <h1>Dive log</h1>
+    <p class="dv-take">
+      <b data-source="summary" data-field="dives_total" data-row="0" class="dash-skeleton">—</b> dives so far,
+      <b data-source="summary" data-field="bottom_hm" data-row="0" class="dash-skeleton">—</b> underwater,
+      deepest <b data-source="summary" data-field="deepest_m" data-row="0" class="dash-skeleton">—</b>&nbsp;m.
+      <span class="dv-await" hidden><span class="warn"><b data-source="summary" data-field="incomplete" data-row="0">—</b> still missing a date, duration or max depth</span>: they're greyed in the log below.</span>
+    </p>
+    <button class="dv-refresh" type="button">Re-read sheet</button>
+  </header>
+
+  <section class="dv-tiles" id="headline">
+    <div class="dv-tile"><div class="lbl">Dives</div><div class="big"><span data-source="summary" data-field="dives_total" data-row="0" class="dash-skeleton">—</span></div><div class="sub"><span data-source="summary" data-field="nitrox_dives" data-row="0">—</span> on nitrox</div></div>
+    <div class="dv-tile"><div class="lbl">Bottom time</div><div class="big"><span data-source="summary" data-field="bottom_hm" data-row="0" class="dash-skeleton">—</span></div><div class="sub">avg <span data-source="summary" data-field="avg_duration_min" data-row="0">—</span> min a dive</div></div>
+    <div class="dv-tile"><div class="lbl">Deepest</div><div class="big"><span data-source="summary" data-field="deepest_m" data-row="0" class="dash-skeleton">—</span><span class="unit">m</span></div><div class="sub" data-source="summary" data-field="deepest_site" data-row="0">—</div></div>
+    <div class="dv-tile"><div class="lbl">Average max depth</div><div class="big"><span data-source="summary" data-field="avg_depth_m" data-row="0" class="dash-skeleton">—</span><span class="unit">m</span></div><div class="sub">longest dive <span data-source="summary" data-field="longest_min" data-row="0">—</span> min</div></div>
+    <div class="dv-tile"><div class="lbl">Air use (SAC)</div><div class="big"><span data-source="summary" data-field="avg_sac" data-row="0" class="dash-skeleton">—</span><span class="unit">L/min</span></div><div class="sub">best <span data-source="summary" data-field="best_sac" data-row="0">—</span> L/min</div></div>
+    <div class="dv-tile"><div class="lbl">Dive sites</div><div class="big"><span data-source="summary" data-field="sites" data-row="0" class="dash-skeleton">—</span></div><div class="sub">water <span data-source="summary" data-field="min_temp" data-row="0">—</span>–<span data-source="summary" data-field="max_temp" data-row="0">—</span>&nbsp;°C</div></div>
+  </section>
+
+  <section class="dv-card" id="depth">
+    <h2>Every dive, by depth</h2>
+    <p class="note">Each bar drops from the surface to that dive's max depth. The pale notch is average depth, where your computer recorded it.</p>
+    <div class="dv-legend"><span><i style="background:var(--dv-c0)"></i>Air</span><span><i style="background:var(--dv-c1)"></i>Nitrox</span></div>
+    <div class="dv-chart dash-skeleton" id="depth-chart" data-source="log"></div>
+  </section>
+
+  <div class="dv-grid">
+    <section class="dv-card" id="bottom-time">
+      <h2>Bottom time, building up</h2>
+      <p class="note">Running total of hours underwater, one point per dive.</p>
+      <div class="dv-chart short dash-skeleton" id="cum-chart" data-source="cumulative"></div>
+    </section>
+    <section class="dv-card" id="sac">
+      <h2>Air consumption</h2>
+      <p class="note">SAC in litres a minute, lower is better. Dashed line is your average. Indicative only: it uses max depth and assumes 12 L where the cylinder isn't known.</p>
+      <div class="dv-chart short dash-skeleton" id="sac-chart" data-source="log"></div>
+    </section>
+  </div>
+
+  <div class="dv-grid">
+    <section class="dv-card" id="depth-vs-time">
+      <h2>Depth vs duration</h2>
+      <p class="note">Deeper dives lower down. Your long ones have mostly been shallow, which is how it should be.</p>
+      <div class="dv-legend"><span><i style="background:var(--dv-c0)"></i>Air</span><span><i style="background:var(--dv-c1)"></i>Nitrox</span></div>
+      <div class="dv-chart short dash-skeleton" id="scatter-chart" data-source="log"></div>
+    </section>
+    <section class="dv-card" id="sites">
+      <h2>Sites</h2>
+      <p class="note">Logged dives per location. Rating is your 1–10 site score, averaged where scored.</p>
+      <div class="dv-tablewrap">
+        <table id="sites-table" data-source="by_site" data-row-key="site">
+          <thead><tr><th data-field="site">Site</th><th data-field="dives" class="num">Dives</th><th data-field="minutes" class="num">Min</th><th data-field="deepest_m" class="num">Deepest m</th><th data-field="avg_rating" class="num">Rating</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="dv-card" id="log">
+    <h2>The full log</h2>
+    <p class="note">Every row in the sheet. Click a heading to sort. Greyed rows are missing a date, duration or max depth.</p>
+    <input class="dv-search" type="search" placeholder="Search sites, notes, gas…" aria-label="Search the log">
+    <div class="dv-tablewrap">
+      <table id="log-table" data-source="log" data-row-key="row">
+        <thead><tr>
+          <th data-field="dive_no" class="num">#</th>
+          <th data-field="date">Date</th>
+          <th data-field="location">Site</th>
+          <th data-field="duration_min" class="num">Min</th>
+          <th data-field="max_depth_m" class="num">Max m</th>
+          <th data-field="avg_depth_m" class="num hide-narrow">Avg m</th>
+          <th data-field="gas" class="hide-narrow">Gas</th>
+          <th data-field="water_temp_c" class="num hide-narrow">°C</th>
+          <th data-field="vis_m" class="num hide-narrow">Vis m</th>
+          <th data-field="weight_kg" class="num hide-narrow">Kg</th>
+          <th data-field="sac_l_min" class="num hide-narrow">SAC</th>
+          <th data-field="site_rating" class="hide-narrow">Rating</th>
+          <th data-field="notes" class="hide-narrow">Notes</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+<footer class="foot"><span id="fetched-at">Reading from Google Sheets…</span><span>Live from my dive log in Google Sheets · SAC figures are indicative</span></footer>
+</main>
+<script>
+// ============================================================
+//  CONFIG — paste your Google Sheet's "Publish to web" CSV link
+//  (File → Share → Publish to web → "Dive Log" tab → CSV).
+// ============================================================
+const CSV_URL = "https://docs.google.com/spreadsheets/d/1B1yiCWhWEmXBtRTmcLRfyiaGy5yxxvanYiYHwyDSbRU/gviz/tq?tqx=out:csv&sheet=Dive%20Log";
+
+// ---- tiny stand-in for the dashboard runtime ----------------
+window.dash = (() => {
+  const css = getComputedStyle(document.documentElement);
+  const listeners = [];
+  const calcs = {};
+  const state = { log: { status: 'loading', data: [] } };
+  let results = {};
+  const run = () => listeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
+  const recompute = () => {
+    results = {};
+    for (const [id, c] of Object.entries(calcs)) {
+      const st = state.log;
+      if (st.status !== 'ok') { results[id] = { status: st.status, data: [] }; continue; }
+      try { results[id] = { status: 'ok', data: c.fn(...c.inputs.map((k) => (k === 'log' ? st.data : results[k].data))) }; }
+      catch (e) { console.error(e); results[id] = { status: 'error', data: [] }; }
+    }
+  };
+  return {
+    get colors() { return [css.getPropertyValue('--dv-s0').trim() || '#1f6f8b', css.getPropertyValue('--dv-s1').trim() || '#d9822b']; },
+    calc: (id, o) => { calcs[id] = o; },
+    loader: () => {},
+    data: (id) => (id === 'log' ? state.log : results[id] || { status: 'loading', data: [] }),
+    onData: (fn) => { listeners.push(fn); try { fn(); } catch (e) { console.error(e); } },
+    refresh: () => load(),
+    _set: (st) => { state.log = st; recompute(); run(); },
+    _rerun: run,
+  };
+})();
+
+const HEADERS = {
+  'dive no': 'dive_no', 'watch dive no': 'watch_no', 'date': 'date', 'location': 'location', 'time': 'time',
+  'duration': 'duration_min', 'gas': 'gas', 'max depth': 'max_depth_m', 'avg depth': 'avg_depth_m',
+  'weight': 'weight_kg', 'water temp': 'water_temp_c', 'vis': 'vis_m', 'start bar': 'start_bar', 'end bar': 'end_bar',
+  'exposure': 'exposure', 'footwear': 'footwear', 'dive site rating': 'site_rating', 'trim rating': 'trim_rating',
+  'notes': 'notes', 'cyl': 'cyl_l', 'sac': 'sac_l_min'
+};
+const NUMERIC = new Set(['dive_no','watch_no','duration_min','max_depth_m','avg_depth_m','weight_kg','water_temp_c','vis_m','start_bar','end_bar','cyl_l','sac_l_min']);
+const norm = (h) => h.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+
+function parseLog(text) {
+  const grid = d3.csvParseRows(text);
+  const hi = grid.findIndex((r) => r.some((c) => norm(c) === 'dive no'));
+  if (hi < 0) throw new Error("Couldn't find the header row with “Dive No.” in the published sheet.");
+  const cols = grid[hi].map((h) => HEADERS[norm(h)] || null);
+  const off = grid[hi].findIndex((c) => norm(c) === 'dive no');
+  const rows = [];
+  for (const r of grid.slice(hi + 1)) {
+    if ((r[off] || '').trim().toLowerCase().startsWith('summary')) break;
+    const o = {};
+    cols.forEach((k, i) => {
+      if (!k) return;
+      let v = (r[i] ?? '').trim();
+      if (v === '' || v === '/') { o[k] = null; return; }
+      if (NUMERIC.has(k)) { const n = Number(v.replace(/,/g, '')); o[k] = Number.isFinite(n) ? n : null; return; }
+      if (k === 'date') {
+        let m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) { o[k] = m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); return; }
+        m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        o[k] = m ? m[0] : null; return;
+      }
+      o[k] = v;
+    });
+    if (o.dive_no == null && o.watch_no == null && !o.date && o.duration_min == null) continue;
+    o.row = rows.length + 1;
+    rows.push(o);
+  }
+  if (!rows.length) throw new Error('Found the header but no dive rows under it.');
+  return rows;
+}
+
+let lastOk = null;
+async function load() {
+  const err = document.getElementById('load-error');
+  if (!CSV_URL || CSV_URL.startsWith('__')) {
+    err.hidden = false;
+    err.textContent = 'No data source yet: set CSV_URL in index.html to your Google Sheet’s “Publish to web” CSV link.';
+    dash._set({ status: 'error', data: [] });
+    return;
+  }
+  dash._set({ ...(lastOk || { status: 'loading', data: [] }), refreshing: !!lastOk });
+  try {
+    const sep = CSV_URL.includes('?') ? '&' : '?';
+    const res = await fetch(CSV_URL + sep + '_=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('Google Sheets answered ' + res.status + '. Check the sheet is still published to the web.');
+    const text = await res.text();
+    if (/^\s*</.test(text)) throw new Error('Got a web page instead of CSV. Make sure you published the “Dive Log” tab as CSV, not as a web page.');
+    lastOk = { status: 'ok', data: parseLog(text) };
+    err.hidden = true;
+    dash._set(lastOk);
+    const t = document.getElementById('fetched-at');
+    if (t) t.textContent = 'Read from Google Sheets at ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    console.error(e);
+    err.hidden = false;
+    err.textContent = 'Couldn’t read the dive log: ' + e.message;
+    dash._set(lastOk ? { ...lastOk, refreshing: false } : { status: 'error', data: [] });
+  }
+}
+let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(dash._rerun, 150); });
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => dash._rerun());
+
+</script>
+<script>
+
+dash.calc('summary', {
+  inputs: ['log'],
+  title: 'Dive totals',
+  description: 'A row counts as a dive if it has a date or a duration. Complete means it has a date, a duration and a max depth.',
+  fn: (log) => {
+    const dated = log.filter((d) => d.date || d.duration_min != null);
+    const done = dated.filter((d) => d.duration_min != null);
+    const complete = dated.filter((d) => d.date && d.duration_min != null && d.max_depth_m != null);
+    const r1 = (v) => (v == null || Number.isNaN(v) ? null : Math.round(v * 10) / 10);
+    const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+    const mins = done.reduce((a, d) => a + d.duration_min, 0);
+    const best = (key) => dated.filter((d) => d[key] != null).reduce((m, d) => (!m || d[key] > m[key] ? d : m), null);
+    const deep = best('max_depth_m');
+    const long = best('duration_min');
+    const sac = dated.map((d) => d.sac_l_min).filter((v) => v != null);
+    const temps = dated.map((d) => d.water_temp_c).filter((v) => v != null);
+    return [{
+      dives_total: dated.length,
+      dives_complete: complete.length,
+      incomplete: dated.length - complete.length,
+      bottom_min: mins,
+      bottom_hm: Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm',
+      deepest_m: deep ? deep.max_depth_m : null,
+      deepest_site: deep ? deep.location : null,
+      longest_min: long ? long.duration_min : null,
+      avg_depth_m: r1(mean(dated.filter((d) => d.max_depth_m != null).map((d) => d.max_depth_m))),
+      avg_duration_min: done.length ? Math.round(mins / done.length) : null,
+      avg_sac: r1(mean(sac)),
+      best_sac: sac.length ? Math.min(...sac) : null,
+      sites: new Set(dated.map((d) => d.location).filter(Boolean)).size,
+      min_temp: temps.length ? Math.min(...temps) : null,
+      max_temp: temps.length ? Math.max(...temps) : null,
+      nitrox_dives: dated.filter((d) => /nitrox/i.test(d.gas || '')).length
+    }];
+  }
+});
+
+dash.calc('by_site', {
+  inputs: ['log'],
+  title: 'Dives by site',
+  description: 'Logged dives grouped by location: count, minutes, deepest and average site rating.',
+  fn: (log) => {
+    const groups = new Map();
+    for (const d of log) {
+      if (d.duration_min == null) continue;
+      const site = d.location || 'No site entered';
+      const g = groups.get(site) || { site, dives: 0, minutes: 0, deepest_m: null, ratings: [] };
+      g.dives += 1;
+      g.minutes += d.duration_min;
+      if (d.max_depth_m != null && (g.deepest_m == null || d.max_depth_m > g.deepest_m)) g.deepest_m = d.max_depth_m;
+      const r = Number(d.site_rating);
+      if (d.site_rating != null && Number.isFinite(r)) g.ratings.push(r);
+      groups.set(site, g);
+    }
+    return [...groups.values()]
+      .map((g) => ({ site: g.site, dives: g.dives, minutes: g.minutes, deepest_m: g.deepest_m,
+        avg_rating: g.ratings.length ? Math.round((g.ratings.reduce((a, b) => a + b, 0) / g.ratings.length) * 10) / 10 : null }))
+      .sort((a, b) => b.dives - a.dives || b.minutes - a.minutes);
+  }
+});
+
+dash.calc('cumulative', {
+  inputs: ['log'],
+  title: 'Running bottom time',
+  description: 'Dives with a duration, in sheet order, with the running total of minutes underwater.',
+  fn: (log) => {
+    let run = 0;
+    return log
+      .filter((d) => d.duration_min != null)
+      .map((d, i) => { run += d.duration_min; return { n: i + 1, row: d.row, dive_no: d.dive_no, date: d.date, location: d.location, minutes: d.duration_min, cum_minutes: run }; });
+  }
+});
+
+</script>
+<script>
+
+(() => {
+  const root = document.querySelector('.dv');
+  const col = (i) => dash.colors[i % dash.colors.length];
+  const fmtDate = (s) => (s ? d3.utcFormat('%-d %b %Y')(new Date(s + 'T00:00:00Z')) : 'no date');
+  const diveName = (d) => (d.dive_no != null ? 'Dive ' + d.dive_no : 'Unnumbered dive' + (d.watch_no != null ? ' (watch #' + d.watch_no + ')' : ''));
+  const key = (d) => String(d.row);
+  const gasColor = (g) => (/nitrox/i.test(g || '') ? col(1) : col(0));
+  const nf = (v) => (v == null ? '' : String(v));
+
+  const status = (el, st) => {
+    el.classList.toggle('dash-skeleton', st.status === 'loading');
+    let f = el.querySelector(':scope > .dv-fail');
+    if (st.status === 'error' || st.status === 'missing') {
+      if (!f) { f = document.createElement('div'); f.className = 'dv-fail'; const dot = document.createElement('i'); f.append(dot, document.createTextNode('Failed to load')); el.appendChild(f); }
+    } else if (f) f.remove();
+  };
+  const tipFor = (box) => {
+    let t = box.querySelector(':scope > .dv-tip');
+    if (!t) { t = document.createElement('div'); t.className = 'dv-tip'; t.hidden = true; box.appendChild(t); }
+    return t;
+  };
+  const showTip = (box, lines, event) => {
+    const t = tipFor(box);
+    t.replaceChildren(...lines.map((l, i) => { const d = document.createElement('div'); d.textContent = l; if (i === 0) d.className = 'h'; return d; }));
+    t.hidden = false;
+    const r = box.getBoundingClientRect();
+    const x = event.clientX - r.left, y = event.clientY - r.top;
+    const tw = t.offsetWidth, th = t.offsetHeight;
+    let left = x + 14; if (left + tw > box.clientWidth) left = Math.max(0, x - tw - 14);
+    let top = y - th - 10; if (top < 0) top = y + 14;
+    t.style.left = left + 'px'; t.style.top = top + 'px';
+  };
+  const hideTip = (box) => { const t = box.querySelector(':scope > .dv-tip'); if (t) t.hidden = true; };
+  const styleAxis = (g) => { g.attr('font-size', null).attr('font-family', null); g.select('.domain').remove(); g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)'); };
+  const diveLines = (d) => [
+    diveName(d) + ' · ' + fmtDate(d.date),
+    d.location || 'No site entered',
+    'Max ' + d.max_depth_m + ' m' + (d.avg_depth_m != null ? ' · avg ' + d.avg_depth_m + ' m' : ''),
+    d.duration_min + ' min · ' + (d.gas || '') + (d.water_temp_c != null ? ' · ' + d.water_temp_c + ' °C' : '')
+  ];
+
+  // Depth profile
+  const drawDepth = () => {
+    const box = document.getElementById('depth-chart');
+    const st = dash.data('log');
+    status(box, st);
+    d3.select(box).selectAll('svg').remove();
+    if (st.status !== 'ok') return;
+    const rows = st.data.filter((r) => r.duration_min != null && r.max_depth_m != null);
+    const W = Math.max(280, box.clientWidth), H = 260, m = { t: 22, r: 8, b: 26, l: 44 };
+    const maxD = Math.ceil((d3.max(rows, (r) => r.max_depth_m) || 10) / 5) * 5;
+    const x = d3.scaleBand(rows.map(key), [m.l, W - m.r]).padding(0.28);
+    const byKey = new Map(rows.map((r) => [key(r), r]));
+    const y = d3.scaleLinear([0, maxD], [m.t, H - m.b]);
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const ga = svg.append('g').attr('transform', `translate(${m.l},0)`)
+      .call(d3.axisLeft(y).ticks(Math.min(6, maxD / 5)).tickSize(-(W - m.l - m.r)).tickFormat((v) => v + ' m'));
+    styleAxis(ga); ga.selectAll('text').attr('x', -8);
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--cds-chart-axis)');
+    svg.append('text').attr('x', W - m.r).attr('y', m.t - 8).attr('text-anchor', 'end').text('Surface');
+    const step = Math.ceil(rows.length / Math.max(1, Math.floor((W - m.l) / 26)));
+    const gx = svg.append('g').attr('transform', `translate(0,${H - m.b})`)
+      .call(d3.axisBottom(x).tickSize(0).tickValues(x.domain().filter((_, i) => i % step === 0)).tickFormat((v) => { const r = byKey.get(v); return r && r.dive_no != null ? '#' + r.dive_no : '·'; }));
+    styleAxis(gx); gx.selectAll('text').attr('dy', '1.1em');
+    const bw = Math.min(32, x.bandwidth());
+    const off = (x.bandwidth() - bw) / 2;
+    const bars = svg.append('g').selectAll('g').data(rows).join('g');
+    bars.append('rect').attr('x', (d) => x(key(d)) + off).attr('y', y(0)).attr('width', bw)
+      .attr('height', (d) => Math.max(2, y(d.max_depth_m) - y(0))).attr('rx', 4).attr('fill', (d) => gasColor(d.gas));
+    bars.filter((d) => d.avg_depth_m != null).append('line')
+      .attr('x1', (d) => x(key(d)) + off + 2).attr('x2', (d) => x(key(d)) + off + bw - 2)
+      .attr('y1', (d) => y(d.avg_depth_m)).attr('y2', (d) => y(d.avg_depth_m))
+      .attr('stroke', 'var(--color-bg)').attr('stroke-width', 2).attr('stroke-linecap', 'round').attr('opacity', 0.85);
+    bars.append('rect').attr('x', (d) => x(key(d))).attr('y', m.t).attr('width', x.step()).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('mousemove', (event, d) => { bars.selectAll('rect:first-child').attr('opacity', (o) => (o === d ? 1 : 0.45)); showTip(box, diveLines(d), event); })
+      .on('mouseleave', () => { bars.selectAll('rect:first-child').attr('opacity', 1); hideTip(box); });
+  };
+
+  // Cumulative bottom time
+  const drawCum = () => {
+    const box = document.getElementById('cum-chart');
+    const st = dash.data('cumulative');
+    status(box, st);
+    d3.select(box).selectAll('svg').remove();
+    if (st.status !== 'ok' || !st.data.length) return;
+    const rows = st.data.map((d) => ({ ...d, t: d.n, h: d.cum_minutes / 60 }));
+    const W = Math.max(260, box.clientWidth), H = 220, m = { t: 14, r: 56, b: 26, l: 34 };
+    const x = d3.scaleLinear([1, Math.max(2, rows.length)], [m.l, W - m.r]);
+    const y = d3.scaleLinear([0, Math.ceil(d3.max(rows, (d) => d.h) / 2) * 2 || 2], [H - m.b, m.t]);
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const ga = svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - m.l - m.r)).tickFormat((v) => v + 'h'));
+    styleAxis(ga); ga.selectAll('text').attr('x', -6);
+    const gx = svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - m.l - m.r) / 60))).tickSize(0).tickFormat(d3.format('d')));
+    styleAxis(gx); gx.selectAll('text').attr('dy', '1.1em');
+    const grad = 'dv-cum-grad';
+    const lg = svg.append('defs').append('linearGradient').attr('id', grad).attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', 1);
+    [[0, .26], [.25, .16], [.5, .08], [.75, .03], [1, 0]].forEach(([o, a]) => lg.append('stop').attr('offset', o).attr('style', `stop-color:${col(0)};stop-opacity:${a}`));
+    svg.append('path').datum(rows).attr('fill', `url(#${grad})`).attr('d', d3.area().x((d) => x(d.t)).y0(y(0)).y1((d) => y(d.h)).curve(d3.curveLinear));
+    svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', col(0)).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
+      .attr('d', d3.line().x((d) => x(d.t)).y((d) => y(d.h)));
+    const last = rows[rows.length - 1];
+    svg.append('text').attr('x', x(last.t) + 6).attr('y', y(last.h)).attr('dy', '0.35em').style('fill', 'var(--color-fg)').text(Math.floor(last.cum_minutes / 60) + 'h ' + (last.cum_minutes % 60) + 'm');
+    const dot = svg.append('circle').attr('r', 4).attr('fill', col(0)).attr('stroke', 'var(--color-panel)').attr('stroke-width', 2).style('display', 'none');
+    const pts = rows.map((d) => [x(d.t), y(d.h)]);
+    const del = d3.Delaunay.from(pts);
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('mousemove', (event) => {
+        const [mx, my] = d3.pointer(event); const d = rows[del.find(mx, my)];
+        dot.style('display', null).attr('cx', x(d.t)).attr('cy', y(d.h));
+        showTip(box, [diveName(d) + ' · ' + fmtDate(d.date), d.location || 'No site entered', 'Dive ' + d.n + ' overall · +' + d.minutes + ' min · total ' + Math.floor(d.cum_minutes / 60) + 'h ' + (d.cum_minutes % 60) + 'm'], event);
+      })
+      .on('mouseleave', () => { dot.style('display', 'none'); hideTip(box); });
+  };
+
+  // SAC trend
+  const drawSac = () => {
+    const box = document.getElementById('sac-chart');
+    const st = dash.data('log');
+    status(box, st);
+    d3.select(box).selectAll('svg').remove();
+    if (st.status !== 'ok') return;
+    const rows = st.data.filter((d) => d.sac_l_min != null);
+    if (!rows.length) return;
+    const W = Math.max(260, box.clientWidth), H = 220, m = { t: 14, r: 64, b: 26, l: 34 };
+    const x = d3.scalePoint(rows.map(key), [m.l + 8, W - m.r]);
+    const byKey = new Map(rows.map((r) => [key(r), r]));
+    const step = Math.ceil(rows.length / Math.max(1, Math.floor((W - m.l - m.r) / 28)));
+    const ext = d3.extent(rows, (d) => d.sac_l_min);
+    const y = d3.scaleLinear([Math.floor((ext[0] - 2) / 5) * 5, Math.ceil((ext[1] + 2) / 5) * 5], [H - m.b, m.t]);
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const ga = svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - m.l - m.r)));
+    styleAxis(ga); ga.selectAll('text').attr('x', -6);
+    const gx = svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickSize(0).tickValues(x.domain().filter((_, i) => i % step === 0)).tickFormat((v) => { const r = byKey.get(v); return r && r.dive_no != null ? '#' + r.dive_no : '·'; }));
+    styleAxis(gx); gx.selectAll('text').attr('dy', '1.1em');
+    const avg = d3.mean(rows, (d) => d.sac_l_min);
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(avg)).attr('y2', y(avg)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 4');
+    svg.append('text').attr('x', W - m.r + 6).attr('y', y(avg)).attr('dy', '0.35em').text('avg ' + d3.format('.1f')(avg));
+    svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', col(0)).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
+      .attr('d', d3.line().x((d) => x(key(d))).y((d) => y(d.sac_l_min)));
+    const bestV = ext[0];
+    svg.append('g').selectAll('circle').data(rows).join('circle').attr('cx', (d) => x(key(d))).attr('cy', (d) => y(d.sac_l_min))
+      .attr('r', (d) => (d.sac_l_min === bestV ? 5 : 3.5)).attr('fill', (d) => (d.sac_l_min === bestV ? 'var(--color-ok)' : col(0)))
+      .attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
+    const b = rows.find((d) => d.sac_l_min === bestV);
+    svg.append('text').attr('x', x(key(b))).attr('y', y(bestV) + 16).attr('text-anchor', 'middle').style('fill', 'var(--color-ok)').text('best');
+    svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (d) => x(key(d)) - x.step() / 2).attr('width', x.step()).attr('y', m.t).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('mousemove', (event, d) => showTip(box, [diveName(d) + ' · ' + fmtDate(d.date), d.location || 'No site entered', 'SAC ' + d.sac_l_min + ' L/min', (d.start_bar ?? '?') + ' → ' + (d.end_bar ?? '?') + ' bar · ' + d.duration_min + ' min'], event))
+      .on('mouseleave', () => hideTip(box));
+  };
+
+  // Depth vs duration
+  const drawScatter = () => {
+    const box = document.getElementById('scatter-chart');
+    const st = dash.data('log');
+    status(box, st);
+    d3.select(box).selectAll('svg').remove();
+    if (st.status !== 'ok') return;
+    const rows = st.data.filter((d) => d.duration_min != null && d.max_depth_m != null);
+    const W = Math.max(260, box.clientWidth), H = 220, m = { t: 14, r: 12, b: 34, l: 44 };
+    const x = d3.scaleLinear([0, Math.ceil(d3.max(rows, (d) => d.duration_min) / 10) * 10], [m.l, W - m.r]);
+    const y = d3.scaleLinear([0, Math.ceil(d3.max(rows, (d) => d.max_depth_m) / 5) * 5], [m.t, H - m.b]);
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const ga = svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(W - m.l - m.r)).tickFormat((v) => v + ' m'));
+    styleAxis(ga); ga.selectAll('text').attr('x', -6);
+    const gx = svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5).tickSize(0));
+    styleAxis(gx); gx.selectAll('text').attr('dy', '1.1em');
+    svg.append('text').attr('x', W - m.r).attr('y', H - 2).attr('text-anchor', 'end').text('minutes');
+    const dots = svg.append('g').selectAll('circle').data(rows).join('circle').attr('cx', (d) => x(d.duration_min)).attr('cy', (d) => y(d.max_depth_m))
+      .attr('r', 5).attr('fill', (d) => gasColor(d.gas)).attr('fill-opacity', 0.85).attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
+    const del = d3.Delaunay.from(rows, (d) => x(d.duration_min), (d) => y(d.max_depth_m));
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('mousemove', (event) => { const [mx, my] = d3.pointer(event); const d = rows[del.find(mx, my)]; dots.attr('r', (o) => (o === d ? 7 : 5)); showTip(box, diveLines(d), event); })
+      .on('mouseleave', () => { dots.attr('r', 5); hideTip(box); });
+  };
+
+  // Sites table
+  const drawSites = () => {
+    const st = dash.data('by_site');
+    const tb = document.querySelector('#sites-table tbody');
+    if (st.status !== 'ok') { tb.replaceChildren(); return; }
+    tb.replaceChildren(...st.data.map((r) => {
+      const tr = document.createElement('tr');
+      [['site', ''], ['dives', 'num'], ['minutes', 'num'], ['deepest_m', 'num'], ['avg_rating', 'num']].forEach(([k, c]) => {
+        const td = document.createElement('td'); td.className = c; td.textContent = nf(r[k]); tr.appendChild(td);
+      });
+      return tr;
+    }));
+  };
+
+  // Full log
+  const logCols = [['dive_no', 'num'], ['date', 'nowrap'], ['location', ''], ['duration_min', 'num'], ['max_depth_m', 'num'], ['avg_depth_m', 'num hide-narrow'], ['gas', 'hide-narrow'], ['water_temp_c', 'num hide-narrow'], ['vis_m', 'num hide-narrow'], ['weight_kg', 'num hide-narrow'], ['sac_l_min', 'num hide-narrow'], ['site_rating', 'hide-narrow'], ['notes', 'notes hide-narrow']];
+  let sortKey = 'dive_no', sortDir = 1, query = '';
+  const search = document.querySelector('.dv-search');
+  search.addEventListener('input', () => { query = search.value.trim().toLowerCase(); drawLog(); });
+  document.querySelectorAll('#log-table th').forEach((th) => th.addEventListener('click', () => {
+    const k = th.dataset.field; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = 1; } drawLog();
+  }));
+  const drawLog = () => {
+    const st = dash.data('log');
+    const tb = document.querySelector('#log-table tbody');
+    document.querySelectorAll('#log-table th').forEach((th) => th.setAttribute('aria-sort', th.dataset.field === sortKey ? (sortDir > 0 ? 'ascending' : 'descending') : 'none'));
+    if (st.status !== 'ok') { tb.replaceChildren(); return; }
+    let rows = st.data.filter((r) => r.date || r.duration_min != null);
+    if (query) rows = rows.filter((r) => logCols.some(([k]) => String(r[k] ?? '').toLowerCase().includes(query)));
+    rows = rows.slice().sort((a, b) => {
+      const va = a[sortKey], vb = b[sortKey];
+      if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1;
+      return (typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))) * sortDir;
+    });
+    tb.replaceChildren(...rows.map((r) => {
+      const tr = document.createElement('tr');
+      tr.dataset.key = String(r.row);
+      if (!r.date || r.duration_min == null || r.max_depth_m == null) tr.className = 'pending';
+      logCols.forEach(([k, c]) => { const td = document.createElement('td'); td.className = c; td.textContent = nf(r[k]); tr.appendChild(td); });
+      return tr;
+    }));
+  };
+
+  // Headline numbers
+  const drawSummary = () => {
+    const st = dash.data('summary');
+    const row = st.status === 'ok' ? st.data[0] : null;
+    document.querySelectorAll('[data-source="summary"]').forEach((el) => {
+      el.classList.toggle('dash-skeleton', st.status === 'loading');
+      el.textContent = row && row[el.dataset.field] != null ? String(row[el.dataset.field]) : '—';
+    });
+    document.querySelector('.dv-await').hidden = !(row && row.incomplete > 0);
+    const lst = dash.data('log');
+    const btn = document.querySelector('.dv-refresh');
+    btn.disabled = lst.status === 'loading' || !!lst.refreshing;
+    btn.textContent = btn.disabled ? 'Reading sheet…' : 'Re-read sheet';
+  };
+  document.querySelector('.dv-refresh').addEventListener('click', () => dash.refresh('log'));
+
+  dash.onData(() => {
+    drawSummary(); drawDepth(); drawCum(); drawSac(); drawScatter(); drawSites(); drawLog();
+  });
+})();
+
+load();
+</script>
+</body>
+</html>

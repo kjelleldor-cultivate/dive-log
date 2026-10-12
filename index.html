@@ -9,7 +9,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 /* ---------- CONFIG: data source lives in the script below (CSV_URL) ---------- */
 :root{
@@ -17,7 +19,7 @@
   --font-anthropic-serif:"Source Serif 4",Georgia,serif;
   --color-bg:#f7f6f2;--color-panel:#ffffff;--color-fg:#1d1d1b;--color-fg-muted:#6b6a65;
   --color-border-line:#e4e2db;--color-ok:#1f7a4d;--color-warn:#a3560b;--color-bad:#c0392b;
-  --dv-s0:#1f6f8b;--dv-s1:#d9822b;
+  --dv-s0:#1f6f8b;--dv-s1:#d9822b;--dv-s2:#4f8a3c;--dv-s3:#8e5bb5;--dv-s4:#c2477a;--dv-s5:#7a6a2f;
   --cds-chart-grid:#ecebe6;--cds-chart-axis:#bdbbb3;--cds-chart-reference:#8f8d86;
   --cds-surface-popover:#ffffff;--cds-border:#dddbd3;--cds-text-secondary:#6b6a65;
   --cds-shadow-popover:0 6px 20px rgba(0,0,0,.12);
@@ -31,7 +33,7 @@
   :root{
     --color-bg:#151514;--color-panel:#1f1f1d;--color-fg:#ecebe6;--color-fg-muted:#9d9b94;
     --color-border-line:#33332f;--color-ok:#5cc38b;--color-warn:#e2a35a;--color-bad:#ef6b5b;
-    --dv-s0:#5fb3d0;--dv-s1:#f0a45c;
+    --dv-s0:#5fb3d0;--dv-s1:#f0a45c;--dv-s2:#86c46e;--dv-s3:#b996dc;--dv-s4:#ea7fa8;--dv-s5:#cdb867;
     --cds-chart-grid:#2c2c29;--cds-chart-axis:#4a4a45;--cds-chart-reference:#8a8882;
     --cds-surface-popover:#262624;--cds-border:#3b3b37;--cds-text-secondary:#9d9b94;
     --cds-shadow-popover:0 6px 20px rgba(0,0,0,.5);
@@ -49,6 +51,20 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
 .foot a{color:inherit}
 .dv-error{background:var(--color-panel);border:1px solid var(--color-border-line);border-left:3px solid var(--color-bad);border-radius:var(--cds-radius);padding:var(--cds-pad-sm) var(--cds-pad-lg);font-size:var(--cds-font-size-body);line-height:1.5}
 .dv-error[hidden]{display:none}
+.geo-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--cds-gap-sm)}
+.geo-chips{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);margin:0 0 var(--cds-gap-md)}
+.geo-chip{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-bg);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.geo-chip b{font-family:var(--font-anthropic-serif);font-weight:400;font-size:20px;color:var(--color-fg)}
+.geo-count{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.map-box{height:400px;border-radius:var(--cds-radius);overflow:hidden;border:1px solid var(--color-border-line);background:var(--color-bg);z-index:0}
+.map-tools{display:flex;justify-content:space-between;align-items:center;gap:var(--cds-gap-sm);margin-top:var(--cds-gap-sm);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.map-tools button{padding:4px 12px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-panel);color:var(--color-fg);font:inherit;cursor:pointer}
+.geo-missing{font-size:var(--cds-font-size-caption);color:var(--color-warn);margin-top:var(--cds-gap-sm)}
+.geo-missing[hidden]{display:none}
+.geo-pop{font-family:var(--font-anthropic-sans);font-size:13px;line-height:1.5}
+.geo-pop .muted{color:#6b6a65}
+.leaflet-container{font-family:var(--font-anthropic-sans)}
+@media (prefers-color-scheme:dark){.leaflet-popup-content-wrapper,.leaflet-popup-tip,.leaflet-tooltip{background:#262624;color:#ecebe6;border-color:#3b3b37}.geo-pop .muted{color:#9d9b94}.leaflet-bar a{background:#262624;color:#ecebe6;border-color:#3b3b37}.leaflet-control-attribution{background:rgba(30,30,28,.8)!important;color:#9d9b94}.leaflet-control-attribution a{color:#cfcdc6}}
 </style>
 </head>
 <body>
@@ -117,6 +133,15 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
     <div class="dv-tile"><div class="lbl">Dive sites</div><div class="big"><span data-source="summary" data-field="sites" data-row="0" class="dash-skeleton">—</span></div><div class="sub">water <span data-source="summary" data-field="min_temp" data-row="0">—</span>–<span data-source="summary" data-field="max_temp" data-row="0">—</span>&nbsp;°C</div></div>
   </section>
 
+  <section class="dv-card" id="places">
+    <div class="geo-head"><h2>Where I've dived</h2><span class="geo-count" id="geo-count"></span></div>
+    <p class="note">Every site in the log, sized by number of dives. Click a pin for details. Hollow dashed pins are placed by region only.</p>
+    <div class="geo-chips" id="geo-chips"></div>
+    <div class="map-box dash-skeleton" id="map-box"></div>
+    <div class="map-tools"><span>Scroll the page as normal; use + and − or pinch to zoom the map.</span><button type="button" id="map-fit">Show all sites</button></div>
+    <div class="geo-missing" id="geo-missing" hidden></div>
+  </section>
+
   <section class="dv-card" id="depth">
     <h2>Every dive, by depth</h2>
     <p class="note">Each bar drops from the surface to that dive's max depth. The pale notch is average depth, where your computer recorded it.</p>
@@ -155,6 +180,13 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
       </div>
     </section>
   </div>
+
+  <section class="dv-card" id="temperature">
+    <h2>Water temperature by depth</h2>
+    <p class="note">Each point is one dive: the water temperature your computer logged against that dive's max depth, with one line per trip. Your log holds one temperature per dive, so this compares dives rather than tracing temperature down a single descent.</p>
+    <div class="dv-legend" id="temp-legend"></div>
+    <div class="dv-chart dash-skeleton" id="temp-chart" style="min-height:280px"></div>
+  </section>
 
   <section class="dv-card" id="log">
     <h2>The full log</h2>
@@ -209,7 +241,7 @@ window.dash = (() => {
     }
   };
   return {
-    get colors() { return [css.getPropertyValue('--dv-s0').trim() || '#1f6f8b', css.getPropertyValue('--dv-s1').trim() || '#d9822b']; },
+    get colors() { const c = getComputedStyle(document.documentElement); return ['#1f6f8b', '#d9822b', '#4f8a3c', '#8e5bb5', '#c2477a', '#7a6a2f'].map((f, i) => c.getPropertyValue('--dv-s' + i).trim() || f); },
     calc: (id, o) => { calcs[id] = o; },
     loader: () => {},
     data: (id) => (id === 'log' ? state.log : results[id] || { status: 'loading', data: [] }),
@@ -225,9 +257,10 @@ const HEADERS = {
   'duration': 'duration_min', 'gas': 'gas', 'max depth': 'max_depth_m', 'avg depth': 'avg_depth_m',
   'weight': 'weight_kg', 'water temp': 'water_temp_c', 'vis': 'vis_m', 'start bar': 'start_bar', 'end bar': 'end_bar',
   'exposure': 'exposure', 'footwear': 'footwear', 'dive site rating': 'site_rating', 'trim rating': 'trim_rating',
-  'notes': 'notes', 'cyl': 'cyl_l', 'sac': 'sac_l_min'
+  'notes': 'notes', 'cyl': 'cyl_l', 'sac': 'sac_l_min',
+  'lat': 'lat', 'latitude': 'lat', 'lng': 'lng', 'lon': 'lng', 'long': 'lng', 'longitude': 'lng'
 };
-const NUMERIC = new Set(['dive_no','watch_no','duration_min','max_depth_m','avg_depth_m','weight_kg','water_temp_c','vis_m','start_bar','end_bar','cyl_l','sac_l_min']);
+const NUMERIC = new Set(['dive_no','watch_no','duration_min','max_depth_m','avg_depth_m','weight_kg','water_temp_c','vis_m','start_bar','end_bar','cyl_l','sac_l_min','lat','lng']);
 const norm = (h) => h.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
 
 function parseLog(text) {
@@ -324,7 +357,7 @@ dash.calc('summary', {
       avg_duration_min: done.length ? Math.round(mins / done.length) : null,
       avg_sac: r1(mean(sac)),
       best_sac: sac.length ? Math.min(...sac) : null,
-      sites: new Set(dated.map((d) => d.location).filter(Boolean)).size,
+      sites: new Set(dated.map((d) => (d.location || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/^the /, '')).filter(Boolean)).size,
       min_temp: temps.length ? Math.min(...temps) : null,
       max_temp: temps.length ? Math.max(...temps) : null,
       nitrox_dives: dated.filter((d) => /nitrox/i.test(d.gas || '')).length
@@ -335,19 +368,20 @@ dash.calc('summary', {
 dash.calc('by_site', {
   inputs: ['log'],
   title: 'Dives by site',
-  description: 'Logged dives grouped by location: count, minutes, deepest and average site rating.',
+  description: 'Logged dives grouped by location (ignoring capitals, extra spaces and a leading "The"): count, minutes, deepest and average site rating.',
   fn: (log) => {
     const groups = new Map();
     for (const d of log) {
       if (d.duration_min == null) continue;
-      const site = d.location || 'No site entered';
-      const g = groups.get(site) || { site, dives: 0, minutes: 0, deepest_m: null, ratings: [] };
+      const site = d.location ? d.location.trim() : 'No site entered';
+      const key = site.toLowerCase().replace(/\s+/g, ' ').replace(/^the /, '');
+      const g = groups.get(key) || { site, dives: 0, minutes: 0, deepest_m: null, ratings: [] };
       g.dives += 1;
       g.minutes += d.duration_min;
       if (d.max_depth_m != null && (g.deepest_m == null || d.max_depth_m > g.deepest_m)) g.deepest_m = d.max_depth_m;
       const r = Number(d.site_rating);
       if (d.site_rating != null && Number.isFinite(r)) g.ratings.push(r);
-      groups.set(site, g);
+      groups.set(key, g);
     }
     return [...groups.values()]
       .map((g) => ({ site: g.site, dives: g.dives, minutes: g.minutes, deepest_m: g.deepest_m,
@@ -605,8 +639,196 @@ dash.calc('cumulative', {
   };
   document.querySelector('.dv-refresh').addEventListener('click', () => dash.refresh('log'));
 
+// ---------- Places: known dive sites, plus region fallbacks ----------
+// Add "Lat" and "Lng" columns to the sheet to pin any site exactly; they win over this list.
+const SITE_GEO = [
+  { k: ['mercers'], lat: 51.2445, lng: -0.1525, region: 'Surrey', country: 'UK' },
+  { k: ['xwejni'], lat: 36.0806, lng: 14.2530, region: 'Gozo', country: 'Malta' },
+  { k: ['cathedral cave', 'ghasri'], lat: 36.0768, lng: 14.2199, region: 'Gozo', country: 'Malta' },
+  { k: ['mgarr ix', 'xini'], lat: 36.0219, lng: 14.2712, region: 'Gozo', country: 'Malta' },
+  { k: ['blue hole'], lat: 36.0536, lng: 14.1883, region: 'Gozo', country: 'Malta' },
+  { k: ['inland sea'], lat: 36.0507, lng: 14.1928, region: 'Gozo', country: 'Malta' },
+  { k: ['reqqa'], lat: 36.0815, lng: 14.2369, region: 'Gozo', country: 'Malta' },
+  { k: ['great barrier', 'milln', 'flynn'], lat: -16.74, lng: 146.27, region: 'Great Barrier Reef', country: 'Australia' },
+];
+const REGION_GEO = [
+  { k: ['gozo'], lat: 36.044, lng: 14.25, region: 'Gozo', country: 'Malta' },
+  { k: ['comino'], lat: 36.012, lng: 14.336, region: 'Comino', country: 'Malta' },
+  { k: ['malta'], lat: 35.9, lng: 14.45, region: 'Malta', country: 'Malta' },
+  { k: ['surrey'], lat: 51.25, lng: -0.4, region: 'Surrey', country: 'UK' },
+  { k: ['cornwall'], lat: 50.26, lng: -5.05, region: 'Cornwall', country: 'UK' },
+  { k: ['devon'], lat: 50.5, lng: -3.8, region: 'Devon', country: 'UK' },
+  { k: ['dorset', 'portland'], lat: 50.6, lng: -2.45, region: 'Dorset', country: 'UK' },
+  { k: ['scotland', 'scapa'], lat: 56.5, lng: -4.2, region: 'Scotland', country: 'UK' },
+  { k: ['wales'], lat: 52.3, lng: -3.8, region: 'Wales', country: 'UK' },
+  { k: ['england', ' uk'], lat: 52.5, lng: -1.5, region: 'England', country: 'UK' },
+  { k: ['red sea', 'egypt', 'sharm', 'hurghada', 'dahab'], lat: 27.25, lng: 33.8, region: 'Red Sea', country: 'Egypt' },
+  { k: ['australia', 'queensland'], lat: -20, lng: 146, region: 'Queensland', country: 'Australia' },
+  { k: ['thailand'], lat: 9.5, lng: 99.8, region: 'Thailand', country: 'Thailand' },
+  { k: ['indonesia', 'bali', 'komodo'], lat: -8.4, lng: 115.2, region: 'Indonesia', country: 'Indonesia' },
+  { k: ['philippines'], lat: 10.3, lng: 123.9, region: 'Philippines', country: 'Philippines' },
+  { k: ['maldives'], lat: 3.2, lng: 73.2, region: 'Maldives', country: 'Maldives' },
+  { k: ['mexico', 'cozumel', 'cenote'], lat: 20.4, lng: -87, region: 'Mexico', country: 'Mexico' },
+  { k: ['spain', 'canar', 'tenerife', 'lanzarote'], lat: 28.3, lng: -16.5, region: 'Spain', country: 'Spain' },
+  { k: ['portugal', 'azores', 'madeira'], lat: 38.7, lng: -9.1, region: 'Portugal', country: 'Portugal' },
+  { k: ['greece', 'crete'], lat: 37.9, lng: 23.7, region: 'Greece', country: 'Greece' },
+  { k: ['croatia'], lat: 43.5, lng: 16.4, region: 'Croatia', country: 'Croatia' },
+  { k: ['cyprus'], lat: 34.9, lng: 33.6, region: 'Cyprus', country: 'Cyprus' },
+];
+const plain = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[ħĦ]/g, 'h').toLowerCase().replace(/\s+/g, ' ').trim();
+const siteKey = (s) => plain(s).replace(/^the /, '');
+function placeFor(d) {
+  const t = ' ' + plain(d.location) + ' ' + plain(d.notes);
+  if (d.lat != null && d.lng != null) {
+    const g = REGION_GEO.find((r) => r.k.some((k) => t.includes(k))) || SITE_GEO.find((r) => r.k.some((k) => t.includes(k)));
+    return { lat: d.lat, lng: d.lng, region: g ? g.region : null, country: g ? g.country : 'Elsewhere', exact: true };
+  }
+  const s = SITE_GEO.find((r) => r.k.some((k) => t.includes(k)));
+  if (s) return { ...s, exact: true };
+  const r = REGION_GEO.find((g) => g.k.some((k) => t.includes(k)));
+  if (r) return { ...r, exact: false };
+  return null;
+}
+
+// ---------- Geographic variety map ----------
+let leafletMap = null, pinLayer = null, tileLayer = null, tileDark = null;
+const setTiles = () => {
+  if (!leafletMap) return;
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (tileLayer && tileDark === dark) return;
+  if (tileLayer) leafletMap.removeLayer(tileLayer);
+  tileDark = dark;
+  tileLayer = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, {
+    subdomains: 'abcd', maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  }).addTo(leafletMap);
+};
+const drawMap = () => {
+  const box = document.getElementById('map-box');
+  const chips = document.getElementById('geo-chips');
+  const miss = document.getElementById('geo-missing');
+  const st = dash.data('log');
+  box.classList.toggle('dash-skeleton', st.status === 'loading');
+  if (st.status !== 'ok') { chips.replaceChildren(); return; }
+  if (typeof L === 'undefined') { box.textContent = 'Map library didn’t load.'; return; }
+  if (!leafletMap) {
+    leafletMap = L.map(box, { scrollWheelZoom: false, worldCopyJump: true, zoomControl: true });
+    leafletMap.setView([30, 20], 2);
+    pinLayer = L.layerGroup().addTo(leafletMap);
+  }
+  setTiles();
+  const sites = new Map(), missing = new Set();
+  for (const d of st.data) {
+    if (!(d.date || d.duration_min != null) || !d.location) continue;
+    const p = placeFor(d);
+    if (!p) { missing.add(d.location.trim()); continue; }
+    const key = siteKey(d.location);
+    const g = sites.get(key) || { name: d.location.trim(), ...p, dives: 0, minutes: 0, deepest: null, dates: [] };
+    g.dives += 1; g.minutes += d.duration_min || 0;
+    if (d.max_depth_m != null && (g.deepest == null || d.max_depth_m > g.deepest)) g.deepest = d.max_depth_m;
+    if (d.date) g.dates.push(d.date);
+    sites.set(key, g);
+  }
+  // country chips
+  const countries = d3.rollups([...sites.values()], (v) => ({ sites: v.length, dives: d3.sum(v, (s) => s.dives) }), (s) => s.country)
+    .sort((a, b) => b[1].dives - a[1].dives);
+  chips.replaceChildren(...countries.map(([c, v]) => {
+    const el = document.createElement('div'); el.className = 'geo-chip';
+    const b = document.createElement('b'); b.textContent = c;
+    const s = document.createElement('span'); s.textContent = v.sites + (v.sites === 1 ? ' site · ' : ' sites · ') + v.dives + (v.dives === 1 ? ' dive' : ' dives');
+    el.append(b, s); return el;
+  }));
+  const total = document.getElementById('geo-count');
+  total.textContent = countries.length + (countries.length === 1 ? ' country, ' : ' countries, ') + sites.size + (sites.size === 1 ? ' site' : ' sites');
+  miss.hidden = !missing.size;
+  miss.textContent = missing.size ? 'Not on the map yet (add Lat and Lng columns to the sheet to pin them): ' + [...missing].join('; ') : '';
+  // pins
+  pinLayer.clearLayers();
+  const maxD = d3.max([...sites.values()], (s) => s.dives) || 1;
+  const r = d3.scaleSqrt([1, maxD], [7, 18]);
+  const c0 = dash.colors[0];
+  for (const s of sites.values()) {
+    const m = L.circleMarker([s.lat, s.lng], {
+      radius: r(s.dives), color: c0, weight: 2, fillColor: c0, fillOpacity: s.exact ? 0.55 : 0.12, dashArray: s.exact ? null : '3 3'
+    });
+    const pop = document.createElement('div'); pop.className = 'geo-pop';
+    const h = document.createElement('b'); h.textContent = s.name;
+    const l1 = document.createElement('div'); l1.textContent = s.dives + (s.dives === 1 ? ' dive · ' : ' dives · ') + Math.floor(s.minutes / 60) + 'h ' + (s.minutes % 60) + 'm';
+    const l2 = document.createElement('div'); l2.textContent = s.deepest != null ? 'Deepest ' + s.deepest + ' m' : '';
+    const ds = s.dates.slice().sort();
+    const l3 = document.createElement('div'); l3.className = 'muted';
+    l3.textContent = ds.length ? (ds[0] === ds[ds.length - 1] ? fmtDate(ds[0]) : fmtDate(ds[0]) + ' – ' + fmtDate(ds[ds.length - 1])) : '';
+    pop.append(h, l1, l2, l3);
+    if (!s.exact) { const l4 = document.createElement('div'); l4.className = 'muted'; l4.textContent = 'Approximate: pinned to ' + s.region; pop.append(l4); }
+    m.bindPopup(pop);
+    m.bindTooltip(s.name, { direction: 'top', offset: [0, -6] });
+    pinLayer.addLayer(m);
+  }
+  setTimeout(() => {
+    leafletMap.invalidateSize();
+    const pts = [...sites.values()].map((s) => [s.lat, s.lng]);
+    if (pts.length && !leafletMap._dvFitted) { leafletMap.fitBounds(pts, { padding: [30, 30], maxZoom: 9 }); leafletMap._dvFitted = true; }
+  }, 0);
+};
+document.getElementById('map-fit').addEventListener('click', () => {
+  if (!leafletMap || !pinLayer) return;
+  const pts = []; pinLayer.eachLayer((l) => pts.push(l.getLatLng()));
+  if (pts.length) leafletMap.fitBounds(pts, { padding: [30, 30], maxZoom: 9 });
+});
+
+// ---------- Water temperature profile ----------
+const drawTemp = () => {
+  const box = document.getElementById('temp-chart');
+  const legend = document.getElementById('temp-legend');
+  const st = dash.data('log');
+  status(box, st);
+  d3.select(box).selectAll('svg').remove();
+  legend.replaceChildren();
+  if (st.status !== 'ok') return;
+  const rows = st.data.filter((d) => d.water_temp_c != null && d.max_depth_m != null && d.date);
+  if (!rows.length) return;
+  // a trip = same region in the same month
+  const trips = d3.groups(rows, (d) => { const p = placeFor(d); return (p ? p.region : (d.location || '').split(',').pop().trim()) + '|' + d.date.slice(0, 7); })
+    .map(([k, v]) => {
+      const [region, ym] = k.split('|');
+      return { label: region + ', ' + d3.utcFormat('%b %Y')(new Date(ym + '-01T00:00:00Z')), ym, dives: v.slice().sort((a, b) => a.max_depth_m - b.max_depth_m) };
+    })
+    .sort((a, b) => (a.ym < b.ym ? -1 : 1));
+  trips.forEach((t, i) => { t.color = col(i); });
+  const W = Math.max(280, box.clientWidth), H = 280, m = { t: 14, r: 16, b: 36, l: 44 };
+  const x = d3.scaleLinear([0, Math.ceil(d3.max(rows, (d) => d.max_depth_m) / 5) * 5], [m.l, W - m.r]);
+  const [t0, t1] = d3.extent(rows, (d) => d.water_temp_c);
+  const y = d3.scaleLinear([Math.floor(t0 - 1), Math.ceil(t1 + 1)], [H - m.b, m.t]);
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+  const ga = svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(W - m.l - m.r)).tickFormat((v) => v + '°'));
+  styleAxis(ga); ga.selectAll('text').attr('x', -6);
+  const gx = svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(3, Math.floor((W - m.l - m.r) / 70))).tickSize(0).tickFormat((v) => v + ' m'));
+  styleAxis(gx); gx.selectAll('text').attr('dy', '1.1em');
+  svg.append('text').attr('x', W - m.r).attr('y', H - 2).attr('text-anchor', 'end').text('max depth');
+  const line = d3.line().x((d) => x(d.max_depth_m)).y((d) => y(d.water_temp_c));
+  const g = svg.append('g');
+  trips.forEach((t) => {
+    g.append('path').datum(t.dives).attr('fill', 'none').attr('stroke', t.color).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', line).attr('class', 'tline').attr('data-trip', t.label);
+    g.append('g').selectAll('circle').data(t.dives).join('circle').attr('cx', (d) => x(d.max_depth_m)).attr('cy', (d) => y(d.water_temp_c)).attr('r', 3.5)
+      .attr('fill', t.color).attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
+    const it = document.createElement('span'); const sw = document.createElement('i'); sw.style.background = t.color;
+    it.append(sw, document.createTextNode(t.label)); legend.appendChild(it);
+  });
+  const pts = trips.flatMap((t) => t.dives.map((d) => ({ d, t })));
+  const del = d3.Delaunay.from(pts, (p) => x(p.d.max_depth_m), (p) => y(p.d.water_temp_c));
+  const dot = svg.append('circle').attr('r', 5.5).attr('fill', 'none').attr('stroke-width', 2).style('display', 'none');
+  svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+    .on('mousemove', (event) => {
+      const [mx, my] = d3.pointer(event); const p = pts[del.find(mx, my)];
+      dot.style('display', null).attr('cx', x(p.d.max_depth_m)).attr('cy', y(p.d.water_temp_c)).attr('stroke', p.t.color);
+      g.selectAll('.tline').attr('opacity', function () { return this.dataset.trip === p.t.label ? 1 : 0.25; });
+      showTip(box, [p.t.label, diveName(p.d) + ' · ' + (p.d.location || ''), p.d.water_temp_c + ' °C at ' + p.d.max_depth_m + ' m max'], event);
+    })
+    .on('mouseleave', () => { dot.style('display', 'none'); g.selectAll('.tline').attr('opacity', 1); hideTip(box); });
+};
+
   dash.onData(() => {
-    drawSummary(); drawDepth(); drawCum(); drawSac(); drawScatter(); drawSites(); drawLog();
+    drawMap(); drawTemp(); drawSummary(); drawDepth(); drawCum(); drawSac(); drawScatter(); drawSites(); drawLog();
   });
 })();
 

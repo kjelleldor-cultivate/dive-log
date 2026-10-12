@@ -9,9 +9,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 <style>
 /* ---------- CONFIG: data source lives in the script below (CSV_URL) ---------- */
 :root{
@@ -19,6 +18,7 @@
   --font-anthropic-serif:"Source Serif 4",Georgia,serif;
   --color-bg:#f7f6f2;--color-panel:#ffffff;--color-fg:#1d1d1b;--color-fg-muted:#6b6a65;
   --color-border-line:#e4e2db;--color-ok:#1f7a4d;--color-warn:#a3560b;--color-bad:#c0392b;
+  --map-sea:#eef3f5;--map-land:#dcdad2;--map-border:#f7f6f2;--map-grat:#e2e9ec;
   --dv-s0:#1f6f8b;--dv-s1:#d9822b;--dv-s2:#4f8a3c;--dv-s3:#8e5bb5;--dv-s4:#c2477a;--dv-s5:#7a6a2f;
   --cds-chart-grid:#ecebe6;--cds-chart-axis:#bdbbb3;--cds-chart-reference:#8f8d86;
   --cds-surface-popover:#ffffff;--cds-border:#dddbd3;--cds-text-secondary:#6b6a65;
@@ -33,6 +33,7 @@
   :root{
     --color-bg:#151514;--color-panel:#1f1f1d;--color-fg:#ecebe6;--color-fg-muted:#9d9b94;
     --color-border-line:#33332f;--color-ok:#5cc38b;--color-warn:#e2a35a;--color-bad:#ef6b5b;
+    --map-sea:#1a2226;--map-land:#33332f;--map-border:#1f1f1d;--map-grat:#222c31;
     --dv-s0:#5fb3d0;--dv-s1:#f0a45c;--dv-s2:#86c46e;--dv-s3:#b996dc;--dv-s4:#ea7fa8;--dv-s5:#cdb867;
     --cds-chart-grid:#2c2c29;--cds-chart-axis:#4a4a45;--cds-chart-reference:#8a8882;
     --cds-surface-popover:#262624;--cds-border:#3b3b37;--cds-text-secondary:#9d9b94;
@@ -56,17 +57,14 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
 .geo-chip{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-bg);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
 .geo-chip b{font-family:var(--font-anthropic-serif);font-weight:400;font-size:20px;color:var(--color-fg)}
 .geo-count{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
-.map-box{height:400px;border-radius:var(--cds-radius);overflow:hidden;border:1px solid var(--color-border-line);background:var(--color-bg);z-index:0}
+.map-box{position:relative;border-radius:var(--cds-radius);overflow:hidden;border:1px solid var(--color-border-line);background:var(--map-sea);min-height:300px;touch-action:none}
+.map-box svg{display:block}
+.map-box .pin-label{font-family:var(--font-anthropic-sans);font-size:var(--cds-font-size-caption);fill:var(--color-fg);paint-order:stroke;stroke:var(--map-sea);stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+.map-btns{display:flex;gap:6px}
 .map-tools{display:flex;justify-content:space-between;align-items:center;gap:var(--cds-gap-sm);margin-top:var(--cds-gap-sm);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
 .map-tools button{padding:4px 12px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-panel);color:var(--color-fg);font:inherit;cursor:pointer}
 .geo-missing{font-size:var(--cds-font-size-caption);color:var(--color-warn);margin-top:var(--cds-gap-sm)}
 .geo-missing[hidden]{display:none}
-.geo-pop{font-family:var(--font-anthropic-sans);font-size:13px;line-height:1.5}
-.geo-pop .muted{color:#6b6a65}
-.leaflet-container{font-family:var(--font-anthropic-sans)}
-.map-dark .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6)}
-.map-box:not(.map-dark) .leaflet-tile-pane{filter:saturate(.55) brightness(1.03)}
-@media (prefers-color-scheme:dark){.leaflet-popup-content-wrapper,.leaflet-popup-tip,.leaflet-tooltip{background:#262624;color:#ecebe6;border-color:#3b3b37}.geo-pop .muted{color:#9d9b94}.leaflet-bar a{background:#262624;color:#ecebe6;border-color:#3b3b37}.leaflet-control-attribution{background:rgba(30,30,28,.8)!important;color:#9d9b94}.leaflet-control-attribution a{color:#cfcdc6}}
 </style>
 </head>
 <body>
@@ -137,10 +135,10 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
 
   <section class="dv-card" id="places">
     <div class="geo-head"><h2>Where I've dived</h2><span class="geo-count" id="geo-count"></span></div>
-    <p class="note">Every site in the log, sized by number of dives. Click a pin for details. Hollow dashed pins are placed by region only.</p>
+    <p class="note">Bubbles are sized by number of dives. Zoomed out they group by region; click one or zoom in to see each site. Drag to pan. Hollow dashed pins are placed by region only.</p>
     <div class="geo-chips" id="geo-chips"></div>
     <div class="map-box dash-skeleton" id="map-box"></div>
-    <div class="map-tools"><span>Scroll the page as normal; use + and − or pinch to zoom the map.</span><button type="button" id="map-fit">Show all sites</button></div>
+    <div class="map-tools"><span id="map-hint"></span><span class="map-btns"><button type="button" id="map-in" aria-label="Zoom in">+</button><button type="button" id="map-out" aria-label="Zoom out">−</button><button type="button" id="map-fit">Whole world</button></span></div>
     <div class="geo-missing" id="geo-missing" hidden></div>
   </section>
 
@@ -182,13 +180,6 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
       </div>
     </section>
   </div>
-
-  <section class="dv-card" id="temperature">
-    <h2>Water temperature by depth</h2>
-    <p class="note">Each point is one dive: the water temperature your computer logged against that dive's max depth, with one line per trip. Your log holds one temperature per dive, so this compares dives rather than tracing temperature down a single descent.</p>
-    <div class="dv-legend" id="temp-legend"></div>
-    <div class="dv-chart dash-skeleton" id="temp-chart" style="min-height:280px"></div>
-  </section>
 
   <section class="dv-card" id="log">
     <h2>The full log</h2>
@@ -692,34 +683,22 @@ function placeFor(d) {
   return null;
 }
 
-// ---------- Geographic variety map ----------
-let leafletMap = null, pinLayer = null, tileLayer = null;
-const setTiles = () => {
-  if (!leafletMap) return;
-  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  leafletMap.getContainer().classList.toggle('map-dark', dark);
-  if (tileLayer) return;
-  tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  }).addTo(leafletMap);
+// ---------- Geographic variety map (drawn locally: no tiles, no API key) ----------
+const WORLD_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json';
+let worldLand = null, worldBorders = null, worldLoading = false, worldFailed = false;
+let mapZoom = null, mapSel = null, mapT = d3.zoomIdentity;
+const loadWorld = () => {
+  if (worldLand || worldLoading || worldFailed) return;
+  worldLoading = true;
+  fetch(WORLD_URL).then((r) => r.json()).then((w) => {
+    worldLand = topojson.feature(w, w.objects.land);
+    worldBorders = topojson.mesh(w, w.objects.countries, (a, b) => a !== b);
+    worldLoading = false; drawMap();
+  }).catch(() => { worldLoading = false; worldFailed = true; drawMap(); });
 };
-const drawMap = () => {
-  const box = document.getElementById('map-box');
-  const chips = document.getElementById('geo-chips');
-  const miss = document.getElementById('geo-missing');
-  const st = dash.data('log');
-  box.classList.toggle('dash-skeleton', st.status === 'loading');
-  if (st.status !== 'ok') { chips.replaceChildren(); return; }
-  if (typeof L === 'undefined') { box.textContent = 'Map library didn’t load.'; return; }
-  if (!leafletMap) {
-    leafletMap = L.map(box, { scrollWheelZoom: false, worldCopyJump: true, zoomControl: true });
-    leafletMap.setView([30, 20], 2);
-    pinLayer = L.layerGroup().addTo(leafletMap);
-  }
-  setTiles();
+const collectSites = (data) => {
   const sites = new Map(), missing = new Set();
-  for (const d of st.data) {
+  for (const d of data) {
     if (!(d.date || d.duration_min != null) || !d.location) continue;
     const p = placeFor(d);
     if (!p) { missing.add(d.location.trim()); continue; }
@@ -730,106 +709,123 @@ const drawMap = () => {
     if (d.date) g.dates.push(d.date);
     sites.set(key, g);
   }
-  // country chips
-  const countries = d3.rollups([...sites.values()], (v) => ({ sites: v.length, dives: d3.sum(v, (s) => s.dives) }), (s) => s.country)
-    .sort((a, b) => b[1].dives - a[1].dives);
+  return { sites: [...sites.values()], missing: [...missing] };
+};
+const siteLines = (s) => {
+  const ds = s.dates.slice().sort();
+  const when = ds.length ? (ds[0] === ds[ds.length - 1] ? fmtDate(ds[0]) : fmtDate(ds[0]) + ' – ' + fmtDate(ds[ds.length - 1])) : '';
+  return [s.name, s.dives + (s.dives === 1 ? ' dive · ' : ' dives · ') + Math.floor(s.minutes / 60) + 'h ' + (s.minutes % 60) + 'm' + (s.deepest != null ? ' · deepest ' + s.deepest + ' m' : ''), when + (s.exact ? '' : ' · approximate position')];
+};
+const drawMap = () => {
+  const box = document.getElementById('map-box');
+  const chips = document.getElementById('geo-chips');
+  const miss = document.getElementById('geo-missing');
+  const st = dash.data('log');
+  status(box, st);
+  if (st.status !== 'ok') { chips.replaceChildren(); return; }
+  loadWorld();
+  const { sites, missing } = collectSites(st.data);
+  // country + region counts
+  const countries = d3.rollups(sites, (v) => ({ sites: v.length, dives: d3.sum(v, (s) => s.dives) }), (s) => s.country).sort((a, b) => b[1].dives - a[1].dives);
   chips.replaceChildren(...countries.map(([c, v]) => {
     const el = document.createElement('div'); el.className = 'geo-chip';
     const b = document.createElement('b'); b.textContent = c;
     const s = document.createElement('span'); s.textContent = v.sites + (v.sites === 1 ? ' site · ' : ' sites · ') + v.dives + (v.dives === 1 ? ' dive' : ' dives');
     el.append(b, s); return el;
   }));
-  const total = document.getElementById('geo-count');
-  total.textContent = countries.length + (countries.length === 1 ? ' country, ' : ' countries, ') + sites.size + (sites.size === 1 ? ' site' : ' sites');
-  miss.hidden = !missing.size;
-  miss.textContent = missing.size ? 'Not on the map yet (add Lat and Lng columns to the sheet to pin them): ' + [...missing].join('; ') : '';
-  // pins
-  pinLayer.clearLayers();
-  const maxD = d3.max([...sites.values()], (s) => s.dives) || 1;
-  const r = d3.scaleSqrt([1, maxD], [7, 18]);
-  const c0 = dash.colors[0];
-  for (const s of sites.values()) {
-    const m = L.circleMarker([s.lat, s.lng], {
-      radius: r(s.dives), color: c0, weight: 2, fillColor: c0, fillOpacity: s.exact ? 0.55 : 0.12, dashArray: s.exact ? null : '3 3'
-    });
-    const pop = document.createElement('div'); pop.className = 'geo-pop';
-    const h = document.createElement('b'); h.textContent = s.name;
-    const l1 = document.createElement('div'); l1.textContent = s.dives + (s.dives === 1 ? ' dive · ' : ' dives · ') + Math.floor(s.minutes / 60) + 'h ' + (s.minutes % 60) + 'm';
-    const l2 = document.createElement('div'); l2.textContent = s.deepest != null ? 'Deepest ' + s.deepest + ' m' : '';
-    const ds = s.dates.slice().sort();
-    const l3 = document.createElement('div'); l3.className = 'muted';
-    l3.textContent = ds.length ? (ds[0] === ds[ds.length - 1] ? fmtDate(ds[0]) : fmtDate(ds[0]) + ' – ' + fmtDate(ds[ds.length - 1])) : '';
-    pop.append(h, l1, l2, l3);
-    if (!s.exact) { const l4 = document.createElement('div'); l4.className = 'muted'; l4.textContent = 'Approximate: pinned to ' + s.region; pop.append(l4); }
-    m.bindPopup(pop);
-    m.bindTooltip(s.name, { direction: 'top', offset: [0, -6] });
-    pinLayer.addLayer(m);
-  }
-  setTimeout(() => {
-    leafletMap.invalidateSize();
-    const pts = [...sites.values()].map((s) => [s.lat, s.lng]);
-    if (pts.length && !leafletMap._dvFitted) { leafletMap.fitBounds(pts, { padding: [30, 30], maxZoom: 9 }); leafletMap._dvFitted = true; }
-  }, 0);
-};
-document.getElementById('map-fit').addEventListener('click', () => {
-  if (!leafletMap || !pinLayer) return;
-  const pts = []; pinLayer.eachLayer((l) => pts.push(l.getLatLng()));
-  if (pts.length) leafletMap.fitBounds(pts, { padding: [30, 30], maxZoom: 9 });
-});
+  document.getElementById('geo-count').textContent = countries.length + (countries.length === 1 ? ' country, ' : ' countries, ') + sites.length + (sites.length === 1 ? ' site' : ' sites');
+  miss.hidden = !missing.length;
+  miss.textContent = missing.length ? 'Not on the map yet (add Lat and Lng columns to the sheet to pin them): ' + missing.join('; ') : '';
+  // regions = clusters shown when zoomed out
+  const regions = d3.groups(sites, (s) => s.region + '|' + s.country).map(([k, v]) => ({
+    name: k.split('|')[0], country: k.split('|')[1], sites: v,
+    lat: d3.mean(v, (s) => s.lat), lng: d3.mean(v, (s) => s.lng), dives: d3.sum(v, (s) => s.dives)
+  }));
 
-// ---------- Water temperature profile ----------
-const drawTemp = () => {
-  const box = document.getElementById('temp-chart');
-  const legend = document.getElementById('temp-legend');
-  const st = dash.data('log');
-  status(box, st);
   d3.select(box).selectAll('svg').remove();
-  legend.replaceChildren();
-  if (st.status !== 'ok') return;
-  const rows = st.data.filter((d) => d.water_temp_c != null && d.max_depth_m != null && d.date);
-  if (!rows.length) return;
-  // a trip = same region in the same month
-  const trips = d3.groups(rows, (d) => { const p = placeFor(d); return (p ? p.region : (d.location || '').split(',').pop().trim()) + '|' + d.date.slice(0, 7); })
-    .map(([k, v]) => {
-      const [region, ym] = k.split('|');
-      return { label: region + ', ' + d3.utcFormat('%b %Y')(new Date(ym + '-01T00:00:00Z')), ym, dives: v.slice().sort((a, b) => a.max_depth_m - b.max_depth_m) };
-    })
-    .sort((a, b) => (a.ym < b.ym ? -1 : 1));
-  trips.forEach((t, i) => { t.color = col(i); });
-  const W = Math.max(280, box.clientWidth), H = 280, m = { t: 14, r: 16, b: 36, l: 44 };
-  const x = d3.scaleLinear([0, Math.ceil(d3.max(rows, (d) => d.max_depth_m) / 5) * 5], [m.l, W - m.r]);
-  const [t0, t1] = d3.extent(rows, (d) => d.water_temp_c);
-  const y = d3.scaleLinear([Math.floor(t0 - 1), Math.ceil(t1 + 1)], [H - m.b, m.t]);
-  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
-  const ga = svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(W - m.l - m.r)).tickFormat((v) => v + '°'));
-  styleAxis(ga); ga.selectAll('text').attr('x', -6);
-  const gx = svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(3, Math.floor((W - m.l - m.r) / 70))).tickSize(0).tickFormat((v) => v + ' m'));
-  styleAxis(gx); gx.selectAll('text').attr('dy', '1.1em');
-  svg.append('text').attr('x', W - m.r).attr('y', H - 2).attr('text-anchor', 'end').text('max depth');
-  const line = d3.line().x((d) => x(d.max_depth_m)).y((d) => y(d.water_temp_c));
-  const g = svg.append('g');
-  trips.forEach((t) => {
-    g.append('path').datum(t.dives).attr('fill', 'none').attr('stroke', t.color).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', line).attr('class', 'tline').attr('data-trip', t.label);
-    g.append('g').selectAll('circle').data(t.dives).join('circle').attr('cx', (d) => x(d.max_depth_m)).attr('cy', (d) => y(d.water_temp_c)).attr('r', 3.5)
-      .attr('fill', t.color).attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
-    const it = document.createElement('span'); const sw = document.createElement('i'); sw.style.background = t.color;
-    it.append(sw, document.createTextNode(t.label)); legend.appendChild(it);
-  });
-  const pts = trips.flatMap((t) => t.dives.map((d) => ({ d, t })));
-  const del = d3.Delaunay.from(pts, (p) => x(p.d.max_depth_m), (p) => y(p.d.water_temp_c));
-  const dot = svg.append('circle').attr('r', 5.5).attr('fill', 'none').attr('stroke-width', 2).style('display', 'none');
-  svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
-    .on('mousemove', (event) => {
-      const [mx, my] = d3.pointer(event); const p = pts[del.find(mx, my)];
-      dot.style('display', null).attr('cx', x(p.d.max_depth_m)).attr('cy', y(p.d.water_temp_c)).attr('stroke', p.t.color);
-      g.selectAll('.tline').attr('opacity', function () { return this.dataset.trip === p.t.label ? 1 : 0.25; });
-      showTip(box, [p.t.label, diveName(p.d) + ' · ' + (p.d.location || ''), p.d.water_temp_c + ' °C at ' + p.d.max_depth_m + ' m max'], event);
-    })
-    .on('mouseleave', () => { dot.style('display', 'none'); g.selectAll('.tline').attr('opacity', 1); hideTip(box); });
+  const W = Math.max(280, box.clientWidth), H = Math.round(Math.min(460, Math.max(260, W * 0.5)));
+  box.style.minHeight = H + 'px';
+  const proj = d3.geoNaturalEarth1().fitExtent([[8, 8], [W - 8, H - 8]], { type: 'Sphere' });
+  const path = d3.geoPath(proj);
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H).style('cursor', 'grab');
+  const clipId = 'dv-sphere-clip';
+  svg.append('defs').append('clipPath').attr('id', clipId).append('path').attr('d', path({ type: 'Sphere' }));
+  const root = svg.append('g').attr('clip-path', `url(#${clipId})`);
+  const world = root.append('g');
+  world.append('path').attr('d', path({ type: 'Sphere' })).attr('fill', 'var(--map-sea)');
+  world.append('path').attr('d', path(d3.geoGraticule10())).attr('fill', 'none').attr('stroke', 'var(--map-grat)').attr('stroke-width', 0.5).attr('vector-effect', 'non-scaling-stroke');
+  if (worldLand) {
+    world.append('path').attr('d', path(worldLand)).attr('fill', 'var(--map-land)');
+    world.append('path').attr('d', path(worldBorders)).attr('fill', 'none').attr('stroke', 'var(--map-border)').attr('stroke-width', 0.6).attr('vector-effect', 'non-scaling-stroke');
+  } else if (worldFailed) {
+    svg.append('text').attr('x', W / 2).attr('y', H / 2).attr('text-anchor', 'middle').text('Couldn’t load the world outline; pins are still placed.');
+  }
+  const pinsG = root.append('g');
+  const c0 = dash.colors[0];
+  const maxR = d3.max(regions, (r) => r.dives) || 1;
+  const rR = d3.scaleSqrt([1, maxR], [6, 20]);
+  const maxS = d3.max(sites, (s) => s.dives) || 1;
+  const rS = d3.scaleSqrt([1, maxS], [5, 14]);
+  const DETAIL = 14;
+  const render = () => {
+    const t = mapT, k = t.k;
+    world.attr('transform', t);
+    const detail = k >= DETAIL;
+    const items = detail ? sites.map((s) => ({ kind: 'site', s, x: proj([s.lng, s.lat])[0], y: proj([s.lng, s.lat])[1], r: rS(s.dives), label: s.name.split(',')[0] }))
+      : regions.map((g) => ({ kind: 'region', g, x: proj([g.lng, g.lat])[0], y: proj([g.lng, g.lat])[1], r: rR(g.dives), label: g.name + ' · ' + g.dives }));
+    const sel = pinsG.selectAll('g.pin').data(items, (d) => d.kind + (d.s ? d.s.name : d.g.name)).join((en) => {
+      const g = en.append('g').attr('class', 'pin').style('cursor', 'pointer');
+      g.append('circle'); g.append('text').attr('class', 'pin-label');
+      return g;
+    });
+    sel.attr('transform', (d) => `translate(${t.applyX(d.x)},${t.applyY(d.y)})`);
+    sel.select('circle').attr('r', (d) => d.r).attr('fill', c0)
+      .attr('fill-opacity', (d) => (d.kind === 'site' && !d.s.exact ? 0.15 : 0.7))
+      .attr('stroke', (d) => (d.kind === 'site' && !d.s.exact ? c0 : 'var(--color-panel)'))
+      .attr('stroke-dasharray', (d) => (d.kind === 'site' && !d.s.exact ? '3 2' : null)).attr('stroke-width', 1.5);
+    sel.select('text').attr('x', (d) => d.r + 4).attr('dy', '0.35em').text((d) => d.label);
+    // keep labels from overlapping: hide any label that collides with an earlier one
+    const boxes = [];
+    sel.sort((a, b) => b.r - a.r).each(function (d) {
+      const tx = this.querySelector('text');
+      tx.style.display = null;
+      const len = tx.getComputedTextLength(), px = t.applyX(d.x);
+      const flip = px + d.r + 4 + len > W - 8;
+      tx.setAttribute('x', flip ? -(d.r + 4) : d.r + 4);
+      tx.setAttribute('text-anchor', flip ? 'end' : 'start');
+      const bb = { x: flip ? px - d.r - 4 - len : px + d.r + 4, y: t.applyY(d.y) - 7, w: len, h: 14 };
+      const hit = boxes.some((o) => bb.x < o.x + o.w && bb.x + bb.w > o.x && bb.y < o.y + o.h && bb.y + bb.h > o.y) || bb.x < 4;
+      if (hit) tx.style.display = 'none'; else boxes.push(bb);
+    });
+    sel.on('mousemove', (event, d) => showTip(box, d.kind === 'site' ? siteLines(d.s) : [d.g.name + ', ' + d.g.country, d.g.sites.length + (d.g.sites.length === 1 ? ' site · ' : ' sites · ') + d.g.dives + ' dives', 'Click to zoom in'], event))
+      .on('mouseleave', () => hideTip(box))
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        if (d.kind === 'region') zoomTo(d.g.sites.map((s) => proj([s.lng, s.lat])));
+      });
+    document.getElementById('map-hint').textContent = detail ? 'Showing individual sites. Hover a pin for details.' : 'Showing regions. Click one, or use +, to see individual sites.';
+  };
+  const zoomTo = (pts) => {
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const x0 = d3.min(xs), x1 = d3.max(xs), y0 = d3.min(ys), y1 = d3.max(ys);
+    const k = Math.min(400, Math.max(DETAIL, 0.6 / Math.max((x1 - x0 + 0.02) / W, (y1 - y0 + 0.02) / H)));
+    const t = d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
+    svg.transition().duration(750).call(mapZoom.transform, t);
+  };
+  mapZoom = d3.zoom().scaleExtent([1, 400]).translateExtent([[0, 0], [W, H]]).filter((e) => e.type !== 'wheel' && !e.button)
+    .on('start', () => svg.style('cursor', 'grabbing')).on('end', () => svg.style('cursor', 'grab'))
+    .on('zoom', (e) => { mapT = e.transform; render(); });
+  mapSel = svg;
+  svg.call(mapZoom).call(mapZoom.transform, mapT);
+  mapSel._zoomTo = zoomTo;
+  render();
 };
+document.getElementById('map-in').addEventListener('click', () => mapSel && mapSel.transition().duration(400).call(mapZoom.scaleBy, 3));
+document.getElementById('map-out').addEventListener('click', () => mapSel && mapSel.transition().duration(400).call(mapZoom.scaleBy, 1 / 3));
+document.getElementById('map-fit').addEventListener('click', () => mapSel && mapSel.transition().duration(600).call(mapZoom.transform, d3.zoomIdentity));
 
   dash.onData(() => {
-    drawMap(); drawTemp(); drawSummary(); drawDepth(); drawCum(); drawSac(); drawScatter(); drawSites(); drawLog();
+    drawMap(); drawSummary(); drawDepth(); drawCum(); drawSac(); drawScatter(); drawSites(); drawLog();
   });
 })();
 

@@ -760,7 +760,7 @@ const drawMap = () => {
   } else if (worldFailed) {
     svg.append('text').attr('x', W / 2).attr('y', H / 2).attr('text-anchor', 'middle').text('Couldn’t load the world outline; pins are still placed.');
   }
-  const pinsG = root.append('g');
+  const pinsG = svg.append('g');
   const c0 = dash.colors[0];
   const maxR = d3.max(regions, (r) => r.dives) || 1;
   const rR = d3.scaleSqrt([1, maxR], [6, 20]);
@@ -820,6 +820,7 @@ const drawMap = () => {
   mapSel._zoomTo = zoomTo;
   render();
 };
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (dash.data('log').status === 'ok') drawMap(); });
 document.getElementById('map-in').addEventListener('click', () => mapSel && mapSel.transition().duration(400).call(mapZoom.scaleBy, 3));
 document.getElementById('map-out').addEventListener('click', () => mapSel && mapSel.transition().duration(400).call(mapZoom.scaleBy, 1 / 3));
 document.getElementById('map-fit').addEventListener('click', () => mapSel && mapSel.transition().duration(600).call(mapZoom.transform, d3.zoomIdentity));

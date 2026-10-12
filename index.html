@@ -213,8 +213,8 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
     </section>
     <section class="dv-card" id="sac">
       <h2>Air consumption</h2>
-      <p class="note">SAC in litres a minute, lower is better. Dashed line is your average. Indicative only: it uses max depth and assumes 12 L where the cylinder isn't known.</p>
-      <div class="dv-chart short dash-skeleton" id="sac-chart" data-source="log"></div>
+      <p class="note">SAC in litres a minute, lower is better. Dashed line is your average. Worked out from your average depth where you've recorded it (hollow points use max depth, which flatters the figure), assuming a 12 L cylinder where none is given.</p>
+      <div class="dv-chart short dash-skeleton" id="sac-chart" data-source="sac_by_dive"></div>
     </section>
   </div>
 
@@ -254,7 +254,7 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
           <th data-field="water_temp_c" class="num hide-narrow">°C</th>
           <th data-field="vis_m" class="num hide-narrow">Vis m</th>
           <th data-field="weight_kg" class="num hide-narrow">Kg</th>
-          <th data-field="sac_l_min" class="num hide-narrow">SAC</th>
+          <th data-field="sac_l_min" data-source="sac_by_dive" class="num hide-narrow">SAC</th>
           <th data-field="site_rating" class="hide-narrow">Rating</th>
           <th data-field="notes" class="hide-narrow">Notes</th>
         </tr></thead>
@@ -377,11 +377,27 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 </script>
 <script>
 
-dash.calc('summary', {
+dash.calc('sac_by_dive', {
   inputs: ['log'],
+  title: 'Air consumption per dive',
+  description: 'SAC = (start bar − end bar) × cylinder litres ÷ (minutes × (depth ÷ 10 + 1)), using average depth where recorded, otherwise max depth; cylinder 12 L where blank.',
+  fn: (log) => log
+    .filter((d) => d.start_bar != null && d.end_bar != null && d.start_bar > d.end_bar && d.duration_min > 0 && (d.avg_depth_m != null || d.max_depth_m != null))
+    .map((d) => {
+      const depth = d.avg_depth_m != null ? d.avg_depth_m : d.max_depth_m;
+      const cyl = d.cyl_l || 12;
+      return { row: d.row, dive_no: d.dive_no, watch_no: d.watch_no, date: d.date, location: d.location,
+        sac_l_min: Math.round(((d.start_bar - d.end_bar) * cyl / (d.duration_min * (depth / 10 + 1))) * 10) / 10,
+        basis: d.avg_depth_m != null ? 'average depth' : 'max depth', depth_m: depth,
+        start_bar: d.start_bar, end_bar: d.end_bar, duration_min: d.duration_min };
+    })
+});
+
+dash.calc('summary', {
+  inputs: ['log', 'sac_by_dive'],
   title: 'Dive totals',
   description: 'A row counts as a dive if it has a date or a duration. Complete means it has a date, a duration and a max depth.',
-  fn: (log) => {
+  fn: (log, sac_by_dive) => {
     const dated = log.filter((d) => d.date || d.duration_min != null);
     const done = dated.filter((d) => d.duration_min != null);
     const complete = dated.filter((d) => d.date && d.duration_min != null && d.max_depth_m != null);
@@ -391,7 +407,7 @@ dash.calc('summary', {
     const best = (key) => dated.filter((d) => d[key] != null).reduce((m, d) => (!m || d[key] > m[key] ? d : m), null);
     const deep = best('max_depth_m');
     const long = best('duration_min');
-    const sac = dated.map((d) => d.sac_l_min).filter((v) => v != null);
+    const sac = sac_by_dive.map((d) => d.sac_l_min);
     const temps = dated.map((d) => d.water_temp_c).filter((v) => v != null);
     return [{
       dives_total: dated.length,
@@ -571,11 +587,11 @@ dash.calc('cumulative', {
   // SAC trend
   const drawSac = () => {
     const box = document.getElementById('sac-chart');
-    const st = dash.data('log');
+    const st = dash.data('sac_by_dive');
     status(box, st);
     d3.select(box).selectAll('svg').remove();
     if (st.status !== 'ok') return;
-    const rows = st.data.filter((d) => d.sac_l_min != null);
+    const rows = st.data;
     if (!rows.length) return;
     const W = Math.max(260, box.clientWidth), H = 220, m = { t: 14, r: 64, b: 26, l: 34 };
     const x = d3.scalePoint(rows.map(key), [m.l + 8, W - m.r]);
@@ -595,12 +611,12 @@ dash.calc('cumulative', {
       .attr('d', d3.line().x((d) => x(key(d))).y((d) => y(d.sac_l_min)));
     const bestV = ext[0];
     svg.append('g').selectAll('circle').data(rows).join('circle').attr('cx', (d) => x(key(d))).attr('cy', (d) => y(d.sac_l_min))
-      .attr('r', (d) => (d.sac_l_min === bestV ? 5 : 3.5)).attr('fill', (d) => (d.sac_l_min === bestV ? 'var(--color-ok)' : col(0)))
-      .attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
+      .attr('r', (d) => (d.sac_l_min === bestV ? 5 : 3.5)).attr('fill', (d) => (d.sac_l_min === bestV ? 'var(--color-ok)' : d.basis === 'max depth' ? 'var(--color-panel)' : col(0)))
+      .attr('stroke', (d) => (d.basis === 'max depth' && d.sac_l_min !== bestV ? col(0) : 'var(--color-panel)')).attr('stroke-width', 1.5);
     const b = rows.find((d) => d.sac_l_min === bestV);
     svg.append('text').attr('x', x(key(b))).attr('y', y(bestV) + 16).attr('text-anchor', 'middle').style('fill', 'var(--color-ok)').text('best');
     svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (d) => x(key(d)) - x.step() / 2).attr('width', x.step()).attr('y', m.t).attr('height', H - m.t - m.b).attr('fill', 'transparent')
-      .on('mousemove', (event, d) => showTip(box, [diveName(d) + ' · ' + fmtDate(d.date), d.location || 'No site entered', 'SAC ' + d.sac_l_min + ' L/min', (d.start_bar ?? '?') + ' → ' + (d.end_bar ?? '?') + ' bar · ' + d.duration_min + ' min'], event))
+      .on('mousemove', (event, d) => showTip(box, [diveName(d) + ' · ' + fmtDate(d.date), d.location || 'No site entered', 'SAC ' + d.sac_l_min + ' L/min (from ' + d.basis + ', ' + d.depth_m + ' m)', (d.start_bar ?? '?') + ' → ' + (d.end_bar ?? '?') + ' bar · ' + d.duration_min + ' min'], event))
       .on('mouseleave', () => hideTip(box));
   };
 
@@ -656,7 +672,9 @@ dash.calc('cumulative', {
     const tb = document.querySelector('#log-table tbody');
     document.querySelectorAll('#log-table th').forEach((th) => th.setAttribute('aria-sort', th.dataset.field === sortKey ? (sortDir > 0 ? 'ascending' : 'descending') : 'none'));
     if (st.status !== 'ok') { tb.replaceChildren(); return; }
-    let rows = st.data.filter((r) => r.date || r.duration_min != null);
+    const sacSt = dash.data('sac_by_dive');
+    const sacBy = new Map((sacSt.status === 'ok' ? sacSt.data : []).map((s) => [s.row, s]));
+    let rows = st.data.filter((r) => r.date || r.duration_min != null).map((r) => ({ ...r, sac_l_min: sacBy.has(r.row) ? sacBy.get(r.row).sac_l_min : null, sac_basis: sacBy.has(r.row) ? sacBy.get(r.row).basis : null }));
     if (query) rows = rows.filter((r) => logCols.some(([k]) => String(r[k] ?? '').toLowerCase().includes(query)));
     rows = rows.slice().sort((a, b) => {
       const va = a[sortKey], vb = b[sortKey];
@@ -667,7 +685,7 @@ dash.calc('cumulative', {
       const tr = document.createElement('tr');
       tr.dataset.key = String(r.row);
       if (!r.date || r.duration_min == null || r.max_depth_m == null) tr.className = 'pending';
-      logCols.forEach(([k, c]) => { const td = document.createElement('td'); td.className = c; td.textContent = nf(r[k]); tr.appendChild(td); });
+      logCols.forEach(([k, c]) => { const td = document.createElement('td'); td.className = c; td.textContent = nf(r[k]); if (k === 'sac_l_min' && r.sac_basis === 'max depth') td.title = 'Worked out from max depth (no average depth logged)'; tr.appendChild(td); });
       return tr;
     }));
   };

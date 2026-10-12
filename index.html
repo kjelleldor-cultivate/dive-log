@@ -55,6 +55,7 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
 .geo-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--cds-gap-sm)}
 .geo-chips{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);margin:0 0 var(--cds-gap-md)}
 .geo-chip{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-bg);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.geo-flag{font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;font-size:18px;margin-right:6px;vertical-align:1px}
 .geo-chip b{font-family:var(--font-anthropic-serif);font-weight:400;font-size:20px;color:var(--color-fg)}
 .geo-count{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
 .map-box{position:relative;border-radius:var(--cds-radius);overflow:hidden;border:1px solid var(--color-border-line);background:var(--map-sea);min-height:300px;touch-action:none}
@@ -668,6 +669,7 @@ const REGION_GEO = [
   { k: ['croatia'], lat: 43.5, lng: 16.4, region: 'Croatia', country: 'Croatia' },
   { k: ['cyprus'], lat: 34.9, lng: 33.6, region: 'Cyprus', country: 'Cyprus' },
 ];
+const FLAGS = { UK: '🇬🇧', Malta: '🇲🇹', Australia: '🇦🇺', Egypt: '🇪🇬', Thailand: '🇹🇭', Indonesia: '🇮🇩', Philippines: '🇵🇭', Maldives: '🇲🇻', Mexico: '🇲🇽', Spain: '🇪🇸', Portugal: '🇵🇹', Greece: '🇬🇷', Croatia: '🇭🇷', Cyprus: '🇨🇾' };
 const plain = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[ħĦ]/g, 'h').toLowerCase().replace(/\s+/g, ' ').trim();
 const siteKey = (s) => plain(s).replace(/^the /, '');
 function placeFor(d) {
@@ -729,7 +731,9 @@ const drawMap = () => {
   const countries = d3.rollups(sites, (v) => ({ sites: v.length, dives: d3.sum(v, (s) => s.dives) }), (s) => s.country).sort((a, b) => b[1].dives - a[1].dives);
   chips.replaceChildren(...countries.map(([c, v]) => {
     const el = document.createElement('div'); el.className = 'geo-chip';
-    const b = document.createElement('b'); b.textContent = c;
+    const b = document.createElement('b');
+    if (FLAGS[c]) { const f = document.createElement('span'); f.className = 'geo-flag'; f.textContent = FLAGS[c]; f.setAttribute('aria-hidden', 'true'); b.append(f); }
+    b.append(document.createTextNode(c));
     const s = document.createElement('span'); s.textContent = v.sites + (v.sites === 1 ? ' site · ' : ' sites · ') + v.dives + (v.dives === 1 ? ' dive' : ' dives');
     el.append(b, s); return el;
   }));

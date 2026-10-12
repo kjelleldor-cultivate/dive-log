@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dive Log</title>
-<meta name="description" content="Kjell's scuba dive log: dives, bottom time, depth and air consumption, read live from Google Sheets.">
+<title>Kjell Eldor's Dive Log</title>
+<meta name="description" content="Kjell Eldor's scuba dive log: dives, bottom time, depth and air consumption, read live from Google Sheets.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231f6f8b'/%3E%3Cpath d='M6 18c3-3 6-3 10 0s7 3 10 0' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -52,6 +52,22 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
 .foot a{color:inherit}
 .dv-error{background:var(--color-panel);border:1px solid var(--color-border-line);border-left:3px solid var(--color-bad);border-radius:var(--cds-radius);padding:var(--cds-pad-sm) var(--cds-pad-lg);font-size:var(--cds-font-size-body);line-height:1.5}
 .dv-error[hidden]{display:none}
+.dv-titlerow{display:flex;align-items:center;flex-wrap:wrap;gap:4px 18px}
+.dv-titlerow .sea{width:min(220px,60vw);height:auto;flex:none;overflow:visible}
+@media (prefers-reduced-motion:no-preference){
+  .sea-fish1{animation:swim1 6s ease-in-out infinite}
+  .sea-fish2{animation:swim2 4.5s ease-in-out infinite}
+  .sea-turtle{animation:drift 8s ease-in-out infinite}
+  .sea-octo{animation:bob 5s ease-in-out infinite}
+  .sea-bub circle{animation:rise 3.5s ease-in infinite}
+  .sea-bub circle:nth-child(2n){animation-delay:1.4s}
+}
+@keyframes swim1{0%,100%{transform:translate(6px,22px)}50%{transform:translate(12px,20px)}}
+@keyframes swim2{0%,100%{transform:translate(58px,34px)}50%{transform:translate(52px,36px)}}
+@keyframes drift{0%,100%{transform:translate(92px,14px)}50%{transform:translate(96px,12px)}}
+@keyframes bob{0%,100%{transform:translate(160px,8px)}50%{transform:translate(160px,12px)}}
+@keyframes rise{0%{transform:translateY(4px);opacity:0}30%{opacity:.8}100%{transform:translateY(-6px);opacity:0}}
+
 .geo-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--cds-gap-sm)}
 .geo-chips{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);margin:0 0 var(--cds-gap-md)}
 .geo-chip{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-bg);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
@@ -115,7 +131,46 @@ body{font-family:var(--font-anthropic-sans);-webkit-font-smoothing:antialiased}
 </style>
 <div class="dv">
   <header class="dv-head" id="top">
-    <h1>Dive log</h1>
+    <div class="dv-titlerow">
+      <h1>Kjell Eldor's Dive Log</h1>
+      <svg class="sea" viewBox="0 0 220 56" width="220" height="56" role="img" aria-label="Fish, a turtle and an octopus">
+        <g class="sea-bub" fill="none" stroke="var(--dv-s0)" stroke-width="1.4" opacity=".55">
+          <circle cx="40" cy="12" r="3"/><circle cx="46" cy="5" r="2"/><circle cx="148" cy="10" r="2.5"/><circle cx="153" cy="3.5" r="1.6"/>
+        </g>
+        <g class="sea-fish1" transform="translate(6 22)">
+          <path d="M4 12 C10 2, 26 2, 32 12 C26 22, 10 22, 4 12 Z" fill="var(--dv-s1)"/>
+          <path d="M4 12 L-4 5 L-2 12 L-4 19 Z" fill="var(--dv-s1)"/>
+          <path d="M16 4 C19 1, 23 1, 25 5" fill="none" stroke="var(--dv-s1)" stroke-width="2" stroke-linecap="round"/>
+          <path d="M14 6 C12 10, 12 14, 14 18" fill="none" stroke="var(--color-panel)" stroke-width="1.6" opacity=".8"/>
+          <circle cx="26" cy="10.5" r="1.8" fill="var(--color-panel)"/><circle cx="26.4" cy="10.5" r=".9" fill="var(--color-fg)"/>
+        </g>
+        <g class="sea-fish2" transform="translate(58 34)">
+          <path d="M2 7 C6 1, 15 1, 19 7 C15 13, 6 13, 2 7 Z" fill="var(--dv-s0)"/>
+          <path d="M2 7 L-3 3 L-2 7 L-3 11 Z" fill="var(--dv-s0)"/>
+          <circle cx="15" cy="6" r="1.1" fill="var(--color-panel)"/>
+        </g>
+        <g class="sea-turtle" transform="translate(92 14)">
+          <ellipse cx="22" cy="16" rx="15" ry="11" fill="var(--dv-s2)"/>
+          <path d="M13 11 L22 7 L31 11 L31 21 L22 25 L13 21 Z" fill="none" stroke="var(--color-panel)" stroke-width="1.3" opacity=".7"/>
+          <ellipse cx="40" cy="14" rx="5" ry="4" fill="var(--dv-s2)"/>
+          <circle cx="41.5" cy="12.8" r=".9" fill="var(--color-fg)"/>
+          <path d="M30 6 C34 0, 40 0, 42 2 C38 5, 34 7, 30 8 Z" fill="var(--dv-s2)"/>
+          <path d="M30 26 C34 31, 39 32, 41 30 C37 28, 34 26, 31 24 Z" fill="var(--dv-s2)"/>
+          <path d="M11 9 C8 5, 5 5, 4 6 C6 8, 8 10, 11 12 Z" fill="var(--dv-s2)"/>
+          <path d="M11 22 C8 26, 5 26, 4 25 C6 23, 8 21, 11 20 Z" fill="var(--dv-s2)"/>
+          <path d="M7 16 L2 17" stroke="var(--dv-s2)" stroke-width="2" stroke-linecap="round"/>
+        </g>
+        <g class="sea-octo" transform="translate(160 8)">
+          <path d="M10 18 C6 18, 4 13, 4 9 C4 3, 9 0, 16 0 C23 0, 28 3, 28 9 C28 13, 26 18, 22 18 Z" fill="var(--dv-s4)"/>
+          <g fill="none" stroke="var(--dv-s4)" stroke-width="3" stroke-linecap="round">
+            <path d="M10 17 C8 24, 3 26, 2 32"/><path d="M14 18 C13 26, 10 30, 11 36"/>
+            <path d="M18 18 C19 26, 22 30, 21 36"/><path d="M22 17 C24 24, 29 26, 30 32"/>
+          </g>
+          <circle cx="12" cy="9" r="2" fill="var(--color-panel)"/><circle cx="20" cy="9" r="2" fill="var(--color-panel)"/>
+          <circle cx="12.4" cy="9.4" r="1" fill="var(--color-fg)"/><circle cx="20.4" cy="9.4" r="1" fill="var(--color-fg)"/>
+        </g>
+      </svg>
+    </div>
     <p class="dv-take">
       <b data-source="summary" data-field="dives_total" data-row="0" class="dash-skeleton">—</b> dives so far,
       <b data-source="summary" data-field="bottom_hm" data-row="0" class="dash-skeleton">—</b> underwater,

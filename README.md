@@ -1,4 +1,4 @@
-# Dive log
+# Kjell Eldor's Dive Log
 
 An interactive dashboard of my scuba diving: total dives, bottom time, depth, air consumption (SAC) and the sites I've dived. Every visit reads my log live from Google Sheets.
 
